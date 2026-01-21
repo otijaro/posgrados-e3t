@@ -1,6 +1,6 @@
 # Sistema de Gestión de Posgrados E3T - UIS
 
-Plataforma web para la gestión integral de programas de posgrado de la Escuela de Estudios Industriales y Empresariales (E3T) de la Universidad Industrial de Santander.
+Plataforma web para la gestión integral de programas de posgrado de la Escuela de Ingenierías Eléctrica, Electrónica y de Telecomunicaciones (E3T) de la Universidad Industrial de Santander.
 
 ## 🎯 Características Principales
 
