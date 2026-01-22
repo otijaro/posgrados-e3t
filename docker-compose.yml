@@ -1,0 +1,22 @@
+services:
+  # Base de datos PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: posgrados_db
+    environment:
+      POSTGRES_USER: posgrados_user
+      POSTGRES_PASSWORD: posgrados_pass
+      POSTGRES_DB: posgrados_db
+    ports:
+      - "5433:5432"  # ← Cambiar aquí: 5433 en tu PC, 5432 dentro del contenedor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posgrados_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
