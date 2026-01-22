@@ -26,10 +26,12 @@ class Persona(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relaciones (comentamos VinculacionActiva por ahora)
-    # vinculaciones = relationship("VinculacionActiva", back_populates="persona")
-    
-    # La relación con estudiante_info ya existe por el backref en Estudiante
+    # Relaciones
+    vinculaciones = relationship(
+        "VinculacionActiva", 
+        foreign_keys="VinculacionActiva.id_persona",  # ✅ Especificar FK
+        back_populates="persona"
+    )
     
     def __repr__(self):
         return f"<Persona {self.nombre_completo} - {self.email_institucional}>"

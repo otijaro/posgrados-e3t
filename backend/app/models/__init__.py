@@ -17,7 +17,7 @@ from app.models.estudiante import (
     TipoInscripcion,
     EstadoInscripcion
 )
-from app.models.proyecto import (  # ✅ Nuevo
+from app.models.proyecto import (
     ProyectoGrado,
     PropuestaTesis,
     ReporteSemestral,
@@ -25,6 +25,10 @@ from app.models.proyecto import (  # ✅ Nuevo
     EstadoProyecto,
     EstadoPropuesta,
     TipoDocumento
+)
+from app.models.rol import (  # ✅ Nuevo
+    CatalogoRol,
+    VinculacionActiva
 )
 
 __all__ = [
@@ -43,11 +47,13 @@ __all__ = [
     "EstadoEstudiante",
     "TipoInscripcion",
     "EstadoInscripcion",
-    "ProyectoGrado",  # ✅ Nuevo
-    "PropuestaTesis",  # ✅ Nuevo
-    "ReporteSemestral",  # ✅ Nuevo
-    "EvaluacionJurado",  # ✅ Nuevo
-    "EstadoProyecto",  # ✅ Nuevo
-    "EstadoPropuesta",  # ✅ Nuevo
-    "TipoDocumento"  # ✅ Nuevo
+    "ProyectoGrado",
+    "PropuestaTesis",
+    "ReporteSemestral",
+    "EvaluacionJurado",
+    "EstadoProyecto",
+    "EstadoPropuesta",
+    "TipoDocumento",
+    "CatalogoRol",  # ✅ Nuevo
+    "VinculacionActiva"  # ✅ Nuevo
 ]
