@@ -71,7 +71,7 @@ class Estudiante(Base):
     cohorte = relationship("Cohorte", back_populates="estudiantes")
     inscripciones = relationship("InscripcionMateria", back_populates="estudiante")
     requisitos = relationship("RequisitoGrado", back_populates="estudiante")
-    #proyecto = relationship("ProyectoGrado", back_populates="estudiante", uselist=False)
+    proyecto = relationship("ProyectoGrado", back_populates="estudiante", uselist=False)
     
     def __repr__(self):
         return f"<Estudiante {self.codigo_estudiante} - {self.persona.nombre_completo}>"

@@ -60,7 +60,7 @@ class GrupoInvestigacion(Base):
     
     # Relaciones
     escuela = relationship("Escuela", back_populates="grupos_investigacion")
-    # proyectos = relationship("ProyectoGrado", back_populates="grupo_investigacion")  # Comentado por ahora
+    proyectos = relationship("ProyectoGrado", back_populates="grupo_investigacion")  # Comentado por ahora
     
     def __repr__(self):
         return f"<GrupoInvestigacion {self.nombre}>"
@@ -96,7 +96,7 @@ class ProgramaPosgrado(Base):
     # Relaciones
     escuela = relationship("Escuela", back_populates="programas")
     cohortes = relationship("Cohorte", back_populates="programa")
-    # proyectos = relationship("ProyectoGrado", back_populates="programa")  # Comentado por ahora
+    proyectos = relationship("ProyectoGrado", back_populates="programa")  # Comentado por ahora
     materias = relationship("Materia", back_populates="programa")
     
     def __repr__(self):

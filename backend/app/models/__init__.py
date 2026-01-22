@@ -17,6 +17,15 @@ from app.models.estudiante import (
     TipoInscripcion,
     EstadoInscripcion
 )
+from app.models.proyecto import (  # ✅ Nuevo
+    ProyectoGrado,
+    PropuestaTesis,
+    ReporteSemestral,
+    EvaluacionJurado,
+    EstadoProyecto,
+    EstadoPropuesta,
+    TipoDocumento
+)
 
 __all__ = [
     "Base",
@@ -33,5 +42,12 @@ __all__ = [
     "RequisitoGrado",
     "EstadoEstudiante",
     "TipoInscripcion",
-    "EstadoInscripcion"
+    "EstadoInscripcion",
+    "ProyectoGrado",  # ✅ Nuevo
+    "PropuestaTesis",  # ✅ Nuevo
+    "ReporteSemestral",  # ✅ Nuevo
+    "EvaluacionJurado",  # ✅ Nuevo
+    "EstadoProyecto",  # ✅ Nuevo
+    "EstadoPropuesta",  # ✅ Nuevo
+    "TipoDocumento"  # ✅ Nuevo
 ]
