@@ -26,9 +26,19 @@ from app.models.proyecto import (
     EstadoPropuesta,
     TipoDocumento
 )
-from app.models.rol import (  # ✅ Nuevo
+from app.models.rol import (
     CatalogoRol,
     VinculacionActiva
+)
+from app.models.solicitud import (  # ✅ Nuevo
+    Solicitud,
+    FlujoAprobacion,
+    CreditoCondonable,
+    CalendarioSolicitud,
+    TipoSolicitud,
+    CategoriasSolicitud,
+    EstadoSolicitud,
+    NivelAprobacion
 )
 
 __all__ = [
@@ -54,6 +64,14 @@ __all__ = [
     "EstadoProyecto",
     "EstadoPropuesta",
     "TipoDocumento",
-    "CatalogoRol",  # ✅ Nuevo
-    "VinculacionActiva"  # ✅ Nuevo
+    "CatalogoRol",
+    "VinculacionActiva",
+    "Solicitud",  # ✅ Nuevo
+    "FlujoAprobacion",  # ✅ Nuevo
+    "CreditoCondonable",  # ✅ Nuevo
+    "CalendarioSolicitud",  # ✅ Nuevo
+    "TipoSolicitud",  # ✅ Nuevo
+    "CategoriasSolicitud",  # ✅ Nuevo
+    "EstadoSolicitud",  # ✅ Nuevo
+    "NivelAprobacion"  # ✅ Nuevo
 ]
