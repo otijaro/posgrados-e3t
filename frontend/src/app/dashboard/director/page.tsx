@@ -1,11 +1,9 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { getMe, UserInfo } from "@/lib/auth";
 import { StatCard } from "@/components/ui/StatCard";
 import Link from "next/link";
-
-const director = {
-  nombre: "Dr. Omar Tíjaro",
-  cargo: "Director de Trabajos de Grado",
-  email: "ojtijaro@uis.edu.co",
-};
 
 const proyectos = [
   {
@@ -55,76 +53,58 @@ const proyectos = [
 ];
 
 const pendientes = [
-  { tipo: "Aval de reporte", estudiante: "Juliam Díaz", fecha: "2026-04-01", urgente: true },
-  { tipo: "Revisión propuesta", estudiante: "Andrés Gómez", fecha: "2026-04-05", urgente: true },
-  { tipo: "Firma acta evaluación", estudiante: "Carlos Pérez", fecha: "2026-04-10", urgente: false },
+  { tipo: "Aval de reporte",       estudiante: "Juliam Díaz",   fecha: "2026-04-01", urgente: true },
+  { tipo: "Revisión propuesta",    estudiante: "Andrés Gómez",  fecha: "2026-04-05", urgente: true },
+  { tipo: "Firma acta evaluación", estudiante: "Carlos Pérez",  fecha: "2026-04-10", urgente: false },
 ];
 
 const estadoColor: Record<string, string> = {
-  "En Desarrollo": "bg-blue-100 text-blue-800",
-  "En Evaluación": "bg-purple-100 text-purple-800",
-  Aprobado: "bg-green-100 text-green-800",
-  Propuesta: "bg-yellow-100 text-yellow-800",
-  Sustentado: "bg-teal-100 text-teal-800",
+  "En Desarrollo":  "bg-blue-100 text-blue-800",
+  "En Evaluación":  "bg-purple-100 text-purple-800",
+  Aprobado:         "bg-green-100 text-green-800",
+  Propuesta:        "bg-yellow-100 text-yellow-800",
+  Sustentado:       "bg-teal-100 text-teal-800",
 };
 
 export default function DirectorDashboard() {
+  const [user, setUser] = useState<UserInfo | null>(null);
+
+  useEffect(() => {
+    getMe().then(setUser);
+  }, []);
+
   const pendientesAval = proyectos.filter((p) => !p.aval_reporte && p.ultimo_reporte).length;
-  const enDesarrollo = proyectos.filter((p) => p.estado === "En Desarrollo").length;
-  const enEvaluacion = proyectos.filter((p) => p.estado === "En Evaluación").length;
+  const enDesarrollo   = proyectos.filter((p) => p.estado === "En Desarrollo").length;
+  const enEvaluacion   = proyectos.filter((p) => p.estado === "En Evaluación").length;
 
   return (
     <div className="space-y-8">
+
       {/* Encabezado */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800">
-          Bienvenido, {director.nombre} 👨‍🏫
+          Bienvenido, {user?.nombre_completo ?? "..."} 👨‍🏫
         </h1>
-        <p className="text-gray-500 mt-1">{director.cargo} · {director.email}</p>
+        <p className="text-gray-500 mt-1">
+          Director de Trabajos de Grado · {user?.email_institucional ?? ""}
+        </p>
       </div>
 
       {/* Tarjetas resumen */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          titulo="Proyectos Activos"
-          valor={proyectos.length}
-          descripcion="bajo tu dirección"
-          icono="📁"
-          color="border-green-500"
-        />
-        <StatCard
-          titulo="En Desarrollo"
-          valor={enDesarrollo}
-          descripcion="trabajando activamente"
-          icono="⚙️"
-          color="border-blue-500"
-        />
-        <StatCard
-          titulo="En Evaluación"
-          valor={enEvaluacion}
-          descripcion="con evaluadores asignados"
-          icono="🔍"
-          color="border-purple-500"
-        />
-        <StatCard
-          titulo="Avales Pendientes"
-          valor={pendientesAval}
-          descripcion="reportes sin aval"
-          icono="⚠️"
-          color="border-orange-500"
-        />
+        <StatCard titulo="Proyectos Activos"  valor={proyectos.length} descripcion="bajo tu dirección"          icono="📁" color="border-green-500" />
+        <StatCard titulo="En Desarrollo"      valor={enDesarrollo}     descripcion="trabajando activamente"     icono="⚙️" color="border-blue-500" />
+        <StatCard titulo="En Evaluación"      valor={enEvaluacion}     descripcion="con evaluadores asignados"  icono="🔍" color="border-purple-500" />
+        <StatCard titulo="Avales Pendientes"  valor={pendientesAval}   descripcion="reportes sin aval"          icono="⚠️" color="border-orange-500" />
       </div>
 
-      {/* Tareas pendientes */}
+      {/* Acciones pendientes */}
       {pendientes.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-6">
           <h2 className="text-lg font-bold text-orange-800 mb-4">⚠️ Acciones Pendientes</h2>
           <div className="space-y-3">
             {pendientes.map((p, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between bg-white rounded-lg px-4 py-3 shadow-sm"
-              >
+              <div key={i} className="flex items-center justify-between bg-white rounded-lg px-4 py-3 shadow-sm">
                 <div className="flex items-center gap-3">
                   <span className={`w-2 h-2 rounded-full ${p.urgente ? "bg-red-500" : "bg-yellow-400"}`} />
                   <div>
@@ -132,9 +112,7 @@ export default function DirectorDashboard() {
                     <p className="text-xs text-gray-500">{p.estudiante} · Fecha límite: {p.fecha}</p>
                   </div>
                 </div>
-                <button className="text-xs text-orange-700 font-semibold hover:underline">
-                  Resolver →
-                </button>
+                <button className="text-xs text-orange-700 font-semibold hover:underline">Resolver →</button>
               </div>
             ))}
           </div>
@@ -145,10 +123,7 @@ export default function DirectorDashboard() {
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-800">📁 Mis Proyectos Dirigidos</h2>
-          <Link
-            href="/dashboard/director/proyectos"
-            className="text-sm text-green-700 font-semibold hover:underline"
-          >
+          <Link href="/dashboard/director/proyectos" className="text-sm text-green-700 font-semibold hover:underline">
             Ver todos →
           </Link>
         </div>
@@ -187,13 +162,9 @@ export default function DirectorDashboard() {
                   </td>
                   <td className="py-3 text-center">
                     {p.ultimo_reporte ? (
-                      p.aval_reporte ? (
-                        <span className="text-green-600 font-bold">✓</span>
-                      ) : (
-                        <button className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold hover:bg-orange-200 transition-colors">
-                          Pendiente
-                        </button>
-                      )
+                      p.aval_reporte
+                        ? <span className="text-green-600 font-bold">✓</span>
+                        : <button className="text-xs bg-orange-100 text-orange-700 px-3 py-1 rounded-full font-semibold hover:bg-orange-200 transition-colors">Pendiente</button>
                     ) : (
                       <span className="text-gray-300 text-xs">—</span>
                     )}

@@ -4,11 +4,13 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.config import get_settings
-from app.routers import solicitudes_router, programas_router
+from app.routers.auth import router as auth_router
+from app.routers.solicitudes import router as solicitudes_router
+from app.routers.programas import router as programas_router
+from app.routers.estudiante import router as estudiante_router
 
 settings = get_settings()
 
-# Crear aplicación FastAPI
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
@@ -17,7 +19,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -26,26 +27,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Servir archivos estáticos (PDFs subidos)
 os.makedirs("uploads", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
-# Registrar routers
-app.include_router(solicitudes_router, prefix=settings.API_V1_STR)
-app.include_router(programas_router, prefix=settings.API_V1_STR)
+app.include_router(auth_router,       prefix=settings.API_V1_STR)
+app.include_router(solicitudes_router,prefix=settings.API_V1_STR)
+app.include_router(programas_router,  prefix=settings.API_V1_STR)
+app.include_router(estudiante_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")
 async def root():
-    """Endpoint raíz para verificar que la API está funcionando."""
-    return {
-        "message": "API de Posgrados E3T",
-        "version": settings.VERSION,
-        "status": "running"
-    }
-
+    return {"message": "API de Posgrados E3T", "version": settings.VERSION, "status": "running"}
 
 @app.get("/health")
 async def health_check():
-    """Health check para monitoreo."""
     return {"status": "healthy"}

@@ -1,100 +1,104 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { getMe, logout, UserInfo, rolPrincipal } from "@/lib/auth";
 
 const menus: Record<string, { label: string; href: string; icon: string }[]> = {
   estudiante: [
-    { label: "Inicio", href: "/dashboard/estudiante", icon: "🏠" },
-    { label: "Mi Proyecto", href: "/dashboard/estudiante/proyecto", icon: "📄" },
-    { label: "Solicitudes", href: "/dashboard/estudiante/solicitudes", icon: "📋" },
-    { label: "Calendarios", href: "/dashboard/calendarios", icon: "📅" },
-    { label: "Planes de Estudio", href: "/dashboard/planes-estudio", icon: "📚" },
+    { label: "Inicio",            href: "/dashboard/estudiante",             icon: "🏠" },
+    { label: "Mi Proyecto",       href: "/dashboard/estudiante/proyecto",    icon: "📄" },
+    { label: "Solicitudes",       href: "/dashboard/estudiante/solicitudes", icon: "📋" },
+    { label: "Calendarios",       href: "/dashboard/calendarios",            icon: "📅" },
+    { label: "Planes de Estudio", href: "/dashboard/planes-estudio",         icon: "📚" },
   ],
   director: [
-    { label: "Inicio", href: "/dashboard/director", icon: "🏠" },
-    { label: "Proyectos", href: "/dashboard/director/proyectos", icon: "📁" },
+    { label: "Inicio",            href: "/dashboard/director",               icon: "🏠" },
+    { label: "Proyectos",         href: "/dashboard/director/proyectos",     icon: "📁" },
+    { label: "Calendarios",       href: "/dashboard/calendarios",            icon: "📅" },
+    { label: "Planes de Estudio", href: "/dashboard/planes-estudio",         icon: "📚" },
+  ],
+  coordinador: [
+    { label: "Inicio",      href: "/dashboard/coordinador", icon: "🏠" },
     { label: "Calendarios", href: "/dashboard/calendarios", icon: "📅" },
-    { label: "Planes de Estudio", href: "/dashboard/planes-estudio", icon: "📚" },
+  ],
+  comite: [
+    { label: "Inicio",      href: "/dashboard/comite",      icon: "🏠" },
+    { label: "Calendarios", href: "/dashboard/calendarios", icon: "📅" },
   ],
 };
 
-const usuarios: Record<string, { nombre: string; rol: string; codigo: string; iniciales: string }> = {
-  estudiante: { nombre: "Juliam Díaz", rol: "Estudiante", codigo: "2024101001", iniciales: "JD" },
-  director: { nombre: "Dr. Omar Tíjaro", rol: "Director", codigo: "ojtijaro@uis.edu.co", iniciales: "OT" },
+const rolLabel: Record<string, string> = {
+  estudiante:  "Estudiante",
+  director:    "Director",
+  coordinador: "Coordinador",
+  comite:      "Comité",
 };
+
+function iniciales(nombre: string): string {
+  return nombre.split(" ").slice(0, 2).map((n) => n[0]).join("").toUpperCase();
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const [rol, setRol] = useState<"estudiante" | "director">("estudiante");
+  const [user, setUser] = useState<UserInfo | null>(null);
+  const [rol, setRol] = useState<string>("estudiante");
 
-  // Al montar, detectar rol desde la URL o desde localStorage
   useEffect(() => {
-    if (pathname.includes("/director")) {
-      setRol("director");
-      localStorage.setItem("rol_activo", "director");
-    } else if (pathname.includes("/estudiante")) {
-      setRol("estudiante");
-      localStorage.setItem("rol_activo", "estudiante");
-    } else {
-      // Ruta compartida (ej: /dashboard/calendarios) → leer del localStorage
-      const rolGuardado = localStorage.getItem("rol_activo") as "estudiante" | "director" | null;
+    getMe().then((u) => {
+      if (!u) { router.push("/login"); return; }
+      setUser(u);
+      const r = rolPrincipal(u);
+      setRol(r);
+      localStorage.setItem("rol_activo", r);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (pathname.includes("/director"))    setRol("director");
+    else if (pathname.includes("/estudiante"))  setRol("estudiante");
+    else if (pathname.includes("/coordinador")) setRol("coordinador");
+    else if (pathname.includes("/comite"))      setRol("comite");
+    else {
+      const rolGuardado = localStorage.getItem("rol_activo");
       if (rolGuardado) setRol(rolGuardado);
     }
   }, [pathname]);
 
-  const menuItems = menus[rol];
-  const usuario = usuarios[rol];
+  function handleLogout() {
+    logout();
+    router.push("/login");
+  }
 
-  const cambiarRol = (nuevoRol: "estudiante" | "director") => {
-    setRol(nuevoRol);
-    localStorage.setItem("rol_activo", nuevoRol);
-    router.push(`/dashboard/${nuevoRol}`);
-  };
+  const menuItems = menus[rol] ?? menus["estudiante"];
 
   return (
     <aside className="w-64 bg-green-800 text-white flex flex-col min-h-screen">
-      {/* Logo */}
-      <div className="p-6 border-b border-green-700">
-        <h1 className="text-lg font-bold leading-tight">Posgrados E3T</h1>
-        <p className="text-green-300 text-sm mt-1">Universidad Industrial de Santander</p>
-      </div>
 
-      {/* Info del usuario */}
-      <div className="p-4 border-b border-green-700 bg-green-900">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center font-bold text-white text-sm">
-            {usuario.iniciales}
-          </div>
-          <div>
-            <p className="text-sm font-semibold">{usuario.nombre}</p>
-            <p className="text-xs text-green-300">{usuario.rol} · {usuario.codigo}</p>
-          </div>
+      {/* Logo */}
+      <div className="p-5 border-b border-green-700 flex items-center gap-3">
+        <div className="bg-white rounded-lg p-1.5">
+          <Image src="/E3T.png" alt="E3T" width={32} height={28} className="object-contain" />
+        </div>
+        <div>
+          <p className="text-sm font-bold leading-tight">Posgrados E3T</p>
+          <p className="text-green-300 text-xs">UIS</p>
         </div>
       </div>
 
-      {/* Cambiar rol (demo) */}
-      <div className="px-4 pt-3">
-        <p className="text-xs text-green-400 mb-2 font-semibold uppercase tracking-wide">Vista</p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => cambiarRol("estudiante")}
-            className={`flex-1 text-center text-xs py-1.5 rounded-lg font-semibold transition-colors ${
-              rol === "estudiante" ? "bg-green-600 text-white" : "text-green-300 hover:bg-green-700"
-            }`}
-          >
-            Estudiante
-          </button>
-          <button
-            onClick={() => cambiarRol("director")}
-            className={`flex-1 text-center text-xs py-1.5 rounded-lg font-semibold transition-colors ${
-              rol === "director" ? "bg-green-600 text-white" : "text-green-300 hover:bg-green-700"
-            }`}
-          >
-            Director
-          </button>
+      {/* Usuario */}
+      <div className="p-4 border-b border-green-700 bg-green-900">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center font-bold text-sm">
+            {user ? iniciales(user.nombre_completo) : "…"}
+          </div>
+          <div>
+            <p className="text-sm font-semibold">{user?.nombre_completo ?? "Cargando..."}</p>
+            <p className="text-xs text-green-300">{rolLabel[rol]} · {user?.email_institucional ?? ""}</p>
+          </div>
         </div>
       </div>
 
@@ -121,7 +125,10 @@ export default function Sidebar() {
 
       {/* Cerrar sesión */}
       <div className="p-4 border-t border-green-700">
-        <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-green-200 hover:bg-green-700 hover:text-white transition-colors">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-green-200 hover:bg-red-700 hover:text-white transition-colors"
+        >
           <span>🚪</span>
           <span>Cerrar sesión</span>
         </button>
