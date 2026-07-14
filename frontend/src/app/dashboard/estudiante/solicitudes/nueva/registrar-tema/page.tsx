@@ -1,0 +1,551 @@
+"use client";
+
+import { useState, useEffect, useCallback, memo, useRef } from "react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
+import { getMiPerfil, EstudianteInfo } from "@/lib/api";
+import { getMe, UserInfo } from "@/lib/auth";
+
+const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: false });
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const LINK_LINEA = "https://www.uis.edu.co/webUIS/es/academia/facultades/fisicoMecanicas/escuelas/e3t/nuestraEscuela/trabajoGrado.html";
+
+function authHeaders() {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+const CampoReadonly = memo(({ label, valor }: { label: string; valor?: string | null }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
+    <div className={`w-full border rounded-lg px-4 py-2.5 text-sm border-gray-100 bg-gray-50 ${valor ? "text-gray-700" : "text-gray-400 italic"}`}>
+      {valor ?? "No registrado"}
+    </div>
+  </div>
+));
+CampoReadonly.displayName = "CampoReadonly";
+
+const CampoPersona = memo(({
+  label, opcionalLabel, nombre, correo,
+  onNombre, onCorreo, errorNombre, errorCorreo,
+}: {
+  label: string; opcionalLabel?: string;
+  nombre: string; correo: string;
+  onNombre: (v: string) => void; onCorreo: (v: string) => void;
+  errorNombre?: string; errorCorreo?: string;
+}) => (
+  <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-3">
+    <p className="text-sm font-semibold text-gray-600">
+      {label}
+      {opcionalLabel && <span className="ml-2 text-xs font-normal text-gray-400">{opcionalLabel}</span>}
+    </p>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          Nombre completo {!opcionalLabel && <span className="text-red-500">*</span>}
+        </label>
+        <input type="text" value={nombre} onChange={e => onNombre(e.target.value)}
+          placeholder="Ej. Juan Manuel Rey López"
+          className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorNombre ? "border-red-400" : "border-gray-200"}`} />
+        {errorNombre && <p className="text-red-500 text-xs mt-0.5">{errorNombre}</p>}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-600 mb-1">
+          Correo institucional {!opcionalLabel && <span className="text-red-500">*</span>}
+        </label>
+        <input type="email" value={correo} onChange={e => onCorreo(e.target.value)}
+          placeholder="Ej. juan.rey@uis.edu.co"
+          className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorCorreo ? "border-red-400" : "border-gray-200"}`} />
+        {errorCorreo && <p className="text-red-500 text-xs mt-0.5">{errorCorreo}</p>}
+      </div>
+    </div>
+  </div>
+));
+CampoPersona.displayName = "CampoPersona";
+
+export default function RegistrarTemaPage() {
+  const [user, setUser]     = useState<UserInfo | null>(null);
+  const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
+  const [cargando, setCargando]     = useState(true);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+
+  const [dirNombre, setDirNombre]               = useState("");
+  const [dirCorreo, setDirCorreo]               = useState("");
+  const [codNombre, setCodNombre]               = useState("");
+  const [codCorreo, setCodCorreo]               = useState("");
+  const [codCargo, setCodCargo]                 = useState("");
+  const [codEntidad, setCodEntidad]             = useState("");
+  const [titulo, setTitulo]                     = useState("");
+  const [lineaEstrategica, setLineaEstrategica] = useState("");
+  const [grupoInv, setGrupoInv]                 = useState("");
+  const [areaFormacion, setAreaFormacion]       = useState("");
+  const [objetivo, setObjetivo]                 = useState("");
+  const [alcances, setAlcances]                 = useState("");
+  const [documento, setDocumento]               = useState<File | null>(null);
+  const [nombreArchivo, setNombreArchivo]       = useState<string | null>(null);
+
+  const [errors, setErrors]               = useState<Record<string, string>>({});
+  const [enviando, setEnviando]           = useState(false);
+  const [enviado, setEnviado]             = useState(false);
+  const [radicado, setRadicado]           = useState<string | null>(null);
+  const [errorServidor, setErrorServidor] = useState<string | null>(null);
+
+  const [pdfGenerado, setPdfGenerado]         = useState<string | null>(null);
+  const [pdfFirmado, setPdfFirmado]           = useState<string | null>(null);
+  const [mostrarFirmador, setMostrarFirmador] = useState(false);
+  const [generandoPDF, setGenerandoPDF]       = useState(false);
+  const [generandoVer, setGenerandoVer]       = useState(false);
+
+  // Visor embebido
+  const [visorUrl, setVisorUrl]   = useState<string | null>(null);
+  const visorRef                  = useRef<HTMLDivElement>(null);
+  const prevVisorUrl              = useRef<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([getMe(), getMiPerfil()])
+      .then(([u, p]) => {
+        setUser(u); setPerfil(p);
+        setDirNombre(p.proyecto?.director   ?? "");
+        setCodNombre(p.proyecto?.codirector ?? "");
+        setTitulo(p.proyecto?.titulo        ?? "");
+      })
+      .catch((e) => setErrorCarga(e.message))
+      .finally(() => setCargando(false));
+  }, []);
+
+  useEffect(() => {
+    return () => { if (prevVisorUrl.current) URL.revokeObjectURL(prevVisorUrl.current); };
+  }, []);
+
+  const onDirNombre = useCallback((v: string) => { setDirNombre(v); setErrors(p => ({ ...p, director_nombre: "" })); }, []);
+  const onDirCorreo = useCallback((v: string) => { setDirCorreo(v); setErrors(p => ({ ...p, director_correo: "" })); }, []);
+  const onCodNombre = useCallback((v: string) => setCodNombre(v), []);
+  const onCodCorreo = useCallback((v: string) => { setCodCorreo(v); setErrors(p => ({ ...p, codirector_correo: "" })); }, []);
+
+  const getDatosFormulario = () => ({
+    titulo,
+    programa:             perfil?.programa ?? "",
+    autor:                user?.nombre_completo ?? "",
+    codigo:               perfil?.codigo_estudiante ?? "",
+    director:             dirNombre,
+    codirector:           codNombre,
+    codirector_cargo:     codCargo,
+    codirector_entidad:   codEntidad,
+    linea_estrategica:    lineaEstrategica,
+    grupo_investigacion:  grupoInv,
+    area_formacion:       areaFormacion,
+    objetivo_general:     objetivo,
+    descripcion_alcances: alcances,
+  });
+
+  const fetchPDF = async (): Promise<string> => {
+    const res = await fetch(`${API_URL}/api/firmas/generar-pdf-tema-completo`, {
+      method: "POST",
+      headers: { ...authHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(getDatosFormulario()),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Error al generar el PDF");
+    return (await res.json()).pdf_base64;
+  };
+
+  // ── Muestra un PDF base64 en el visor embebido y hace scroll ───────────────
+  const mostrarEnVisor = useCallback((b64: string) => {
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    const blob  = new Blob([bytes], { type: "application/pdf" });
+    if (prevVisorUrl.current) URL.revokeObjectURL(prevVisorUrl.current);
+    const url = URL.createObjectURL(blob);
+    prevVisorUrl.current = url;
+    setVisorUrl(url);
+    setTimeout(() => visorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+  }, []);
+
+  // Previsualizar → genera y muestra en visor
+  const handlePrevisualizar = async () => {
+    setGenerandoVer(true);
+    setErrorServidor(null);
+    try {
+      mostrarEnVisor(await fetchPDF());
+    } catch (err: unknown) {
+      setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF");
+    } finally {
+      setGenerandoVer(false);
+    }
+  };
+
+  // Firmar → genera PDF y abre el firmador modal
+  const handleFirmar = async () => {
+    setGenerandoPDF(true);
+    setErrorServidor(null);
+    try {
+      const b64 = await fetchPDF();
+      setPdfGenerado(b64);
+      setMostrarFirmador(true);
+    } catch (err: unknown) {
+      setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF");
+    } finally {
+      setGenerandoPDF(false);
+    }
+  };
+
+  // Callback cuando el usuario termina de firmar
+  const handleFirmado = useCallback((b64: string) => {
+    setPdfFirmado(b64);
+    setMostrarFirmador(false);
+    // Actualizar el visor con el PDF ya firmado
+    mostrarEnVisor(b64);
+  }, [mostrarEnVisor]);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
+    if (file.type !== "application/pdf") { setErrors(p => ({ ...p, documento: "Solo PDF." })); return; }
+    if (file.size > 20 * 1024 * 1024)    { setErrors(p => ({ ...p, documento: "Máx. 20 MB." })); return; }
+    setDocumento(file); setNombreArchivo(file.name);
+    setErrors(p => ({ ...p, documento: "" }));
+  };
+
+  const esCorreoValido = (c: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
+
+  const validar = (): boolean => {
+    const e: Record<string, string> = {};
+    if (!dirNombre.trim())                e.director_nombre   = "Obligatorio.";
+    if (!dirCorreo.trim())                e.director_correo   = "Obligatorio.";
+    else if (!esCorreoValido(dirCorreo))  e.director_correo   = "Correo inválido.";
+    const tieneCod = codNombre.trim() || codCorreo.trim();
+    if (tieneCod && codCorreo.trim() && !esCorreoValido(codCorreo)) e.codirector_correo = "Correo inválido.";
+    if (!titulo.trim())                   e.titulo            = "Obligatorio.";
+    if (!lineaEstrategica.trim())         e.linea_estrategica = "Obligatorio.";
+    if (!grupoInv.trim())                 e.grupo_inv         = "Obligatorio.";
+    if (!areaFormacion.trim())            e.area_formacion    = "Obligatorio.";
+    if (!objetivo.trim())                 e.objetivo_general  = "Obligatorio.";
+    else if (objetivo.trim().length < 30) e.objetivo_general  = "Mínimo 30 caracteres.";
+    if (!alcances.trim())                 e.alcances          = "Obligatorio.";
+    setErrors(e); return Object.keys(e).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validar()) return;
+    setEnviando(true); setErrorServidor(null);
+    try {
+      const formData = new FormData();
+      formData.append("director",             dirNombre);
+      formData.append("director_correo",      dirCorreo);
+      formData.append("titulo",               titulo);
+      formData.append("objetivo_general",     objetivo);
+      formData.append("descripcion_alcances", alcances);
+      formData.append("grupo_investigacion",  grupoInv);
+      formData.append("area_formacion",       areaFormacion);
+      formData.append("linea_estrategica",    lineaEstrategica);
+      if (codNombre.trim()) {
+        formData.append("codirector",         codNombre);
+        formData.append("codirector_correo",  codCorreo);
+        formData.append("codirector_cargo",   codCargo);
+        formData.append("codirector_entidad", codEntidad);
+      }
+      if (pdfFirmado) {
+        const bytes = Uint8Array.from(atob(pdfFirmado), c => c.charCodeAt(0));
+        formData.append("documento", new Blob([bytes], { type: "application/pdf" }), "formulario_tema_firmado.pdf");
+      } else if (documento) {
+        formData.append("documento", documento);
+      }
+      const res = await fetch(`${API_URL}/api/solicitudes/registrar-tema`, {
+        method: "POST", headers: authHeaders(), body: formData,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Error al enviar.");
+      setRadicado((await res.json()).numero_radicado);
+      setEnviado(true);
+    } catch (err: unknown) {
+      setErrorServidor(err instanceof Error ? err.message : "Error al enviar.");
+    } finally { setEnviando(false); }
+  };
+
+  if (enviado) return (
+    <div className="max-w-2xl mx-auto">
+      <div className="bg-white rounded-xl shadow-sm p-10 text-center space-y-4">
+        <div className="text-6xl">✅</div>
+        <h2 className="text-2xl font-bold text-gray-800">¡Tema registrado!</h2>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-left space-y-1 text-sm text-green-700">
+          <p><span className="font-semibold">Radicado:</span> <span className="font-mono font-bold">{radicado}</span></p>
+          <p><span className="font-semibold">Estudiante:</span> {user?.nombre_completo}</p>
+          <p><span className="font-semibold">Título:</span> {titulo}</p>
+          <p><span className="font-semibold">Director:</span> {dirNombre} · {dirCorreo}</p>
+          {codNombre && <p><span className="font-semibold">Codirector:</span> {codNombre}</p>}
+          {pdfFirmado && <p><span className="font-semibold">Documento:</span> formulario_tema_firmado.pdf ✍️</p>}
+        </div>
+        <Link href="/dashboard/estudiante/solicitudes"
+          className="inline-block bg-green-700 text-white px-6 py-2.5 rounded-lg hover:bg-green-800 font-semibold text-sm">
+          Ver mis solicitudes
+        </Link>
+      </div>
+    </div>
+  );
+
+  if (cargando) return <div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>;
+  if (errorCarga) return <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700 text-sm">⚠️ {errorCarga}</div>;
+
+  return (
+    <>
+      {mostrarFirmador && pdfGenerado && (
+        <FirmadorPDF
+          pdfBase64={pdfFirmado ?? pdfGenerado}
+          soloVer={false}
+          onFirmado={handleFirmado}
+          onCerrar={() => setMostrarFirmador(false)}
+        />
+      )}
+
+      <div className="max-w-3xl mx-auto space-y-6">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-gray-400 mb-3">
+            <Link href="/dashboard/estudiante/solicitudes" className="hover:text-green-700">Solicitudes</Link>
+            <span>›</span>
+            <Link href="/dashboard/estudiante/solicitudes/nueva" className="hover:text-green-700">Nueva Solicitud</Link>
+            <span>›</span>
+            <span className="text-gray-700 font-medium">Registrar Tema</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-800">📝 Registrar Tema</h1>
+          <p className="text-gray-500 mt-1">Registra el título, director y objetivo general de tu trabajo de grado.</p>
+        </div>
+
+        {errorServidor && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">⚠️ {errorServidor}</div>}
+
+        {pdfFirmado && (
+          <div className="bg-green-50 border border-green-300 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">✍️</span>
+              <div>
+                <p className="text-sm font-semibold text-green-800">Formulario firmado</p>
+                <p className="text-xs text-green-600">Se adjuntará automáticamente al enviar</p>
+              </div>
+            </div>
+            <button onClick={() => setMostrarFirmador(true)}
+              className="text-xs text-green-700 underline hover:text-green-900">Ver / editar firma</button>
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
+
+          {/* 1. Datos del estudiante */}
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">1</span>
+              <h2 className="text-base font-bold text-gray-700">Datos del Estudiante</h2>
+              <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Solo lectura</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2"><CampoReadonly label="Nombre Completo" valor={user?.nombre_completo} /></div>
+              <CampoReadonly label="Correo Institucional" valor={user?.email_institucional} />
+              <CampoReadonly label="Código Estudiantil"   valor={perfil?.codigo_estudiante} />
+              <div className="md:col-span-2"><CampoReadonly label="Programa" valor={perfil?.programa} /></div>
+            </div>
+          </div>
+
+          {/* 2. Director y Codirector */}
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">2</span>
+              <h2 className="text-base font-bold text-gray-700">Director y Codirector</h2>
+            </div>
+            <CampoPersona label="Director" nombre={dirNombre} correo={dirCorreo}
+              onNombre={onDirNombre} onCorreo={onDirCorreo}
+              errorNombre={errors.director_nombre} errorCorreo={errors.director_correo} />
+            <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-3">
+              <p className="text-sm font-semibold text-gray-600">
+                Codirector <span className="ml-2 text-xs font-normal text-gray-400">Opcional</span>
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo</label>
+                  <input type="text" value={codNombre} onChange={e => onCodNombre(e.target.value)}
+                    placeholder="Nombre del codirector"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Correo institucional</label>
+                  <input type="email" value={codCorreo} onChange={e => onCodCorreo(e.target.value)}
+                    placeholder="correo@uis.edu.co"
+                    className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_correo ? "border-red-400" : "border-gray-200"}`} />
+                  {errors.codirector_correo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_correo}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Categoría / Cargo</label>
+                  <input type="text" value={codCargo} onChange={e => setCodCargo(e.target.value)}
+                    placeholder="Ej. Profesor planta, Investigador"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Universidad / Entidad</label>
+                  <input type="text" value={codEntidad} onChange={e => setCodEntidad(e.target.value)}
+                    placeholder="Ej. UIS, Universidad Nacional"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 3. Datos del Tema */}
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">3</span>
+              <h2 className="text-base font-bold text-gray-700">Datos del Tema</h2>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Título del Trabajo <span className="text-red-500">*</span>
+              </label>
+              <input type="text" value={titulo}
+                onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: "" })); }}
+                placeholder="Título completo del trabajo de grado"
+                className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.titulo ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+              {errors.titulo && <p className="text-red-500 text-xs mt-1">{errors.titulo}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Línea Estratégica de Aporte al Desarrollo Regional <span className="text-red-500">*</span>
+              </label>
+              <div className="text-xs text-gray-400 mb-2">
+                <p>Consulta las líneas disponibles en:</p>
+                <a href={LINK_LINEA} target="_blank" rel="noreferrer"
+                  className="text-blue-600 hover:underline break-all">{LINK_LINEA}</a>
+              </div>
+              <input type="text" value={lineaEstrategica}
+                onChange={e => { setLineaEstrategica(e.target.value); setErrors(p => ({ ...p, linea_estrategica: "" })); }}
+                placeholder="Ej. Energía eléctrica y telecomunicaciones"
+                className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.linea_estrategica ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+              {errors.linea_estrategica && <p className="text-red-500 text-xs mt-1">{errors.linea_estrategica}</p>}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Grupo de Investigación <span className="text-red-500">*</span>
+                </label>
+                <input type="text" value={grupoInv}
+                  onChange={e => { setGrupoInv(e.target.value); setErrors(p => ({ ...p, grupo_inv: "" })); }}
+                  placeholder="Ej. Gisel, HDSP, CPS"
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.grupo_inv ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+                {errors.grupo_inv && <p className="text-red-500 text-xs mt-1">{errors.grupo_inv}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Área de Formación <span className="text-red-500">*</span>
+                </label>
+                <input type="text" value={areaFormacion}
+                  onChange={e => { setAreaFormacion(e.target.value); setErrors(p => ({ ...p, area_formacion: "" })); }}
+                  placeholder="Ej. Ingeniería Electrónica"
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.area_formacion ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+                {errors.area_formacion && <p className="text-red-500 text-xs mt-1">{errors.area_formacion}</p>}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Objetivo General <span className="text-red-500">*</span>
+              </label>
+              <textarea value={objetivo} rows={4}
+                onChange={e => { setObjetivo(e.target.value); setErrors(p => ({ ...p, objetivo_general: "" })); }}
+                placeholder="Describe el objetivo general del trabajo (mínimo 30 caracteres)."
+                className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${errors.objetivo_general ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+              <div className="flex justify-between mt-1">
+                {errors.objetivo_general ? <p className="text-red-500 text-xs">{errors.objetivo_general}</p> : <span />}
+                <p className="text-xs text-gray-400 ml-auto">{objetivo.length} caracteres</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Descripción de los Alcances <span className="text-red-500">*</span>
+              </label>
+              <textarea value={alcances} rows={4}
+                onChange={e => { setAlcances(e.target.value); setErrors(p => ({ ...p, alcances: "" })); }}
+                placeholder="Describe los alcances del trabajo de grado."
+                className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${errors.alcances ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+              {errors.alcances && <p className="text-red-500 text-xs mt-1">{errors.alcances}</p>}
+            </div>
+          </div>
+
+          {/* 4. Documento */}
+          <div className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
+              <h2 className="text-base font-bold text-gray-700">Documento</h2>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-blue-800">📋 Formulario oficial UIS</p>
+                <p className="text-xs text-gray-500 mt-0.5">Genera el formulario pre-llenado con todos los datos ingresados</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={handlePrevisualizar} disabled={generandoVer || generandoPDF}
+                  className={`flex-1 flex items-center justify-center gap-2 bg-white border border-blue-300 text-blue-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors ${generandoVer ? "opacity-60 cursor-not-allowed" : ""}`}>
+                  {generandoVer
+                    ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generando...</>
+                    : <><span>👁️</span> Previsualizar</>}
+                </button>
+                <button onClick={handleFirmar} disabled={generandoPDF || generandoVer}
+                  className={`flex-1 flex items-center justify-center gap-2 bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-800 transition-colors ${generandoPDF ? "opacity-60 cursor-not-allowed" : ""}`}>
+                  {generandoPDF
+                    ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generando...</>
+                    : <><span>✍️</span> {pdfFirmado ? "Editar firma" : "Firmar"}</>}
+                </button>
+              </div>
+              {pdfFirmado && <p className="text-xs text-green-700 text-center">✅ Formulario firmado — se adjuntará al enviar</p>}
+            </div>
+
+            {/* ── Visor embebido ── */}
+            {visorUrl && (
+              <div ref={visorRef} className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
+                  <span className="text-xs font-semibold text-gray-600">
+                    {pdfFirmado ? "✍️ Formulario firmado" : "📄 Vista previa del formulario"}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setVisorUrl(null);
+                      if (prevVisorUrl.current) { URL.revokeObjectURL(prevVisorUrl.current); prevVisorUrl.current = null; }
+                    }}
+                    className="text-xs text-gray-400 hover:text-red-500 font-bold">✕ Cerrar</button>
+                </div>
+                <iframe src={visorUrl} className="w-full" style={{ height: "700px" }} title="Vista previa" />
+              </div>
+            )}
+
+            <p className="text-xs text-gray-400 text-center">— o adjunta un documento propio —</p>
+            <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${errors.documento ? "border-red-300 bg-red-50" : nombreArchivo ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-green-400 hover:bg-green-50"}`}>
+              {nombreArchivo ? (
+                <div className="space-y-2">
+                  <span className="text-3xl">📄</span>
+                  <p className="text-sm font-semibold text-green-700">{nombreArchivo}</p>
+                  <button onClick={() => { setNombreArchivo(null); setDocumento(null); }} className="text-xs text-red-500 hover:underline">Eliminar</button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-500">Arrastra aquí o</p>
+                  <label className="cursor-pointer inline-block bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800 font-semibold">
+                    Seleccionar PDF
+                    <input type="file" accept=".pdf" onChange={handleFile} className="hidden" />
+                  </label>
+                  <p className="text-xs text-gray-400">Solo PDF · Máx. 20 MB</p>
+                </div>
+              )}
+            </div>
+            {errors.documento && <p className="text-red-500 text-xs">{errors.documento}</p>}
+          </div>
+
+          {/* Botones */}
+          <div className="p-6 flex items-center justify-between bg-gray-50 rounded-b-xl">
+            <Link href="/dashboard/estudiante/solicitudes/nueva" className="text-sm text-gray-500 hover:text-gray-700 font-medium">← Volver</Link>
+            <button onClick={handleSubmit} disabled={enviando}
+              className={`flex items-center gap-2 bg-green-700 text-white px-8 py-3 rounded-lg font-semibold text-sm transition-colors ${enviando ? "opacity-70 cursor-not-allowed" : "hover:bg-green-800"}`}>
+              {enviando ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Enviando...</> : "Registrar Tema →"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

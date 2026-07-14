@@ -41,11 +41,11 @@ export default function SolicitudEvaluacionPage() {
     documento: null,
   });
 
-  const [jurados, setJurados]       = useState<Jurado[]>([juradoVacio(), juradoVacio(), juradoVacio()]);
-  const [errors, setErrors]         = useState<FormErrors>({});
-  const [enviando, setEnviando]     = useState(false);
-  const [enviado, setEnviado]       = useState(false);
-  const [radicado, setRadicado]     = useState<string | null>(null);
+  const [jurados, setJurados]   = useState<Jurado[]>([juradoVacio(), juradoVacio(), juradoVacio()]);
+  const [errors, setErrors]     = useState<FormErrors>({});
+  const [enviando, setEnviando] = useState(false);
+  const [enviado, setEnviado]   = useState(false);
+  const [radicado, setRadicado] = useState<string | null>(null);
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
 
@@ -55,7 +55,6 @@ export default function SolicitudEvaluacionPage() {
         setUser(u);
         setPerfil(p);
         setProgramas(progs);
-        // Pre-llenar título desde la BD
         if (p.proyecto?.titulo) {
           setForm((prev) => ({ ...prev, titulo: p.proyecto!.titulo }));
         }
@@ -129,16 +128,12 @@ export default function SolicitudEvaluacionPage() {
     setErrorServidor(null);
     try {
       const resultado = await crearSolicitudEvaluacion({
-        nombre_completo: user?.nombre_completo ?? "",
-        codigo:          perfil?.codigo_estudiante ?? "",
-        director:        perfil?.proyecto?.director ?? "",
-        codirector:      perfil?.proyecto?.codirector ?? undefined,
-        titulo:          form.titulo,
-        resumen:         form.resumen,
+        titulo:           form.titulo,
+        resumen:          form.resumen,
         posibles_jurados: jurados.map(j => `${j.nombre} | ${j.institucion} | ${j.correo}`).join("\n"),
-        id_programa:     programas.find(p => p.nombre === perfil?.programa)?.id ?? programas[0]?.id ?? 1,
-        tipo_evaluacion: form.tipo_evaluacion,
-        documento:       form.documento,
+        tipo_evaluacion:  form.tipo_evaluacion,
+        id_programa:      programas.find(p => p.nombre === perfil?.programa)?.id ?? programas[0]?.id ?? 1,
+        documento:        form.documento,
       });
       setRadicado(resultado.numero_radicado);
       setEnviado(true);
@@ -184,8 +179,6 @@ export default function SolicitudEvaluacionPage() {
     );
   }
 
-  // ── Campo solo lectura ─────────────────────────────────────────────────────
-
   const CampoReadonly = ({ label, valor }: { label: string; valor: string | null | undefined }) => (
     <div>
       <label className="block text-sm font-medium text-gray-600 mb-1">{label}</label>
@@ -194,8 +187,6 @@ export default function SolicitudEvaluacionPage() {
       </div>
     </div>
   );
-
-  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">

@@ -16,6 +16,36 @@ const tiposSolicitud = [
     disponible: true,
   },
   {
+    id: "registrar_tema",
+    titulo: "Registrar Tema",
+    descripcion: "Registro del título, director, codirector y objetivo general del trabajo de grado.",
+    icono: "📝",
+    color: "border-green-400 hover:bg-green-50",
+    badge: "bg-green-100 text-green-700",
+    categoria: "Investigación",
+    disponible: true,
+  },
+  {
+    id: "cambio_titulo",
+    titulo: "Cambio de Título",
+    descripcion: "Solicitud de modificación del título del trabajo de investigación o tesis.",
+    icono: "✏️",
+    color: "border-teal-400 hover:bg-teal-50",
+    badge: "bg-teal-100 text-teal-700",
+    categoria: "Académica",
+    disponible: true,
+  },
+  {
+    id: "cambio_director",
+    titulo: "Cambio de Director / Codirector",
+    descripcion: "Solicitud de cambio del director, codirector o ambos para el trabajo de grado o tesis doctoral.",
+    icono: "👤",
+    color: "border-purple-400 hover:bg-purple-50",
+    badge: "bg-purple-100 text-purple-700",
+    categoria: "Académica",
+    disponible: false,
+  },
+  {
     id: "credito_condonable",
     titulo: "Crédito Condonable",
     descripcion: "Solicitud de crédito condonable por docencia directa u otras modalidades según el Acuerdo 350.",
@@ -32,26 +62,6 @@ const tiposSolicitud = [
     icono: "⏳",
     color: "border-orange-400 hover:bg-orange-50",
     badge: "bg-orange-100 text-orange-700",
-    categoria: "Académica",
-    disponible: false,
-  },
-  {
-    id: "cambio_director",
-    titulo: "Cambio de Director",
-    descripcion: "Solicitud de cambio del director del trabajo de grado o tesis doctoral.",
-    icono: "👤",
-    color: "border-purple-400 hover:bg-purple-50",
-    badge: "bg-purple-100 text-purple-700",
-    categoria: "Académica",
-    disponible: false,
-  },
-  {
-    id: "cambio_titulo",
-    titulo: "Cambio de Título",
-    descripcion: "Solicitud de modificación del título del trabajo de investigación o tesis.",
-    icono: "✏️",
-    color: "border-teal-400 hover:bg-teal-50",
-    badge: "bg-teal-100 text-teal-700",
     categoria: "Académica",
     disponible: false,
   },
@@ -107,6 +117,12 @@ const tiposSolicitud = [
   },
 ];
 
+const rutas: Record<string, string> = {
+  evaluacion:      "/dashboard/estudiante/solicitudes/nueva/evaluacion",
+  registrar_tema:  "/dashboard/estudiante/solicitudes/nueva/registrar-tema",
+  cambio_titulo:   "/dashboard/estudiante/solicitudes/nueva/cambio-titulo",
+};
+
 const categorias = ["Todas", ...Array.from(new Set(tiposSolicitud.map((t) => t.categoria)))];
 
 export default function NuevaSolicitudPage() {
@@ -120,31 +136,22 @@ export default function NuevaSolicitudPage() {
       : tiposSolicitud.filter((t) => t.categoria === categoriaActiva);
 
   const handleContinuar = () => {
-    if (!seleccionado) return;
-    if (seleccionado === "evaluacion") {
-      router.push("/dashboard/estudiante/solicitudes/nueva/evaluacion");
-    }
-    // Aquí se agregarán más rutas a medida que se implementen
+    if (!seleccionado || !rutas[seleccionado]) return;
+    router.push(rutas[seleccionado]);
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Encabezado */}
       <div>
         <div className="flex items-center gap-2 text-sm text-gray-400 mb-3">
-          <Link href="/dashboard/estudiante/solicitudes" className="hover:text-green-700">
-            Solicitudes
-          </Link>
+          <Link href="/dashboard/estudiante/solicitudes" className="hover:text-green-700">Solicitudes</Link>
           <span>›</span>
           <span className="text-gray-700 font-medium">Nueva Solicitud</span>
         </div>
         <h1 className="text-2xl font-bold text-gray-800">📝 Nueva Solicitud</h1>
-        <p className="text-gray-500 mt-1">
-          Selecciona el tipo de solicitud que deseas realizar ante el Comité Asesor de Posgrados.
-        </p>
+        <p className="text-gray-500 mt-1">Selecciona el tipo de solicitud que deseas realizar ante el Comité Asesor de Posgrados.</p>
       </div>
 
-      {/* Filtros por categoría */}
       <div className="flex flex-wrap gap-2">
         {categorias.map((cat) => (
           <button
@@ -161,7 +168,6 @@ export default function NuevaSolicitudPage() {
         ))}
       </div>
 
-      {/* Grid de tipos de solicitud */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filtrados.map((tipo) => (
           <button
@@ -176,30 +182,22 @@ export default function NuevaSolicitudPage() {
                 : `${tipo.color} border-gray-200`
             }`}
           >
-            {/* Check de selección */}
             {seleccionado === tipo.id && (
               <div className="absolute top-3 right-3 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
                 <span className="text-white text-xs font-bold">✓</span>
               </div>
             )}
-
-            {/* Próximamente badge */}
             {!tipo.disponible && (
               <div className="absolute top-3 right-3">
-                <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full font-medium">
-                  Próximamente
-                </span>
+                <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full font-medium">Próximamente</span>
               </div>
             )}
-
             <div className="flex items-start gap-4">
               <span className="text-3xl flex-shrink-0">{tipo.icono}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <h3 className="text-sm font-bold text-gray-800">{tipo.titulo}</h3>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tipo.badge}`}>
-                    {tipo.categoria}
-                  </span>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tipo.badge}`}>{tipo.categoria}</span>
                 </div>
                 <p className="text-xs text-gray-500 leading-relaxed">{tipo.descripcion}</p>
               </div>
@@ -208,20 +206,15 @@ export default function NuevaSolicitudPage() {
         ))}
       </div>
 
-      {/* Barra inferior con botón continuar */}
       <div className={`sticky bottom-6 transition-all duration-300 ${seleccionado ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
         <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {seleccionado && (
               <>
-                <span className="text-2xl">
-                  {tiposSolicitud.find((t) => t.id === seleccionado)?.icono}
-                </span>
+                <span className="text-2xl">{tiposSolicitud.find((t) => t.id === seleccionado)?.icono}</span>
                 <div>
                   <p className="text-xs text-gray-400">Solicitud seleccionada</p>
-                  <p className="text-sm font-bold text-gray-800">
-                    {tiposSolicitud.find((t) => t.id === seleccionado)?.titulo}
-                  </p>
+                  <p className="text-sm font-bold text-gray-800">{tiposSolicitud.find((t) => t.id === seleccionado)?.titulo}</p>
                 </div>
               </>
             )}
