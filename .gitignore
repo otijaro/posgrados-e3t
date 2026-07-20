@@ -60,3 +60,6 @@ Thumbs.db
 
 # Docker
 *.pid
+
+# Archivos subidos por usuarios (generados localmente)
+backend/uploads/
