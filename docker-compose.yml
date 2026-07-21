@@ -1,14 +1,13 @@
 services:
-  # Base de datos PostgreSQL
   db:
-    image: postgres:15-alpine
+    image: postgres:15
     container_name: posgrados_db
     environment:
       POSTGRES_USER: posgrados_user
       POSTGRES_PASSWORD: posgrados_pass
       POSTGRES_DB: posgrados_db
     ports:
-      - "5433:5432"  # ← Cambiar aquí: 5433 en tu PC, 5432 dentro del contenedor
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -15,12 +15,23 @@ echo "============================================"
 echo ""
 
 # ── Docker ───────────────────────────────────────────────────
-echo "  [..] Verificando base de datos..."
+echo "  [..] Levantando base de datos..."
 cd "$ROOT"
-docker-compose up -d 2>/dev/null
-echo "  [OK] Base de datos lista"
+docker-compose up -d
+
+# Esperar a que PostgreSQL esté realmente listo
+echo "  [..] Esperando a que PostgreSQL esté listo..."
+for i in $(seq 1 20); do
+    if docker exec posgrados_db pg_isready -U posgrados_user -q 2>/dev/null; then
+        echo "  [OK] PostgreSQL listo"
+        break
+    fi
+    echo "       Intento $i/20..."
+    sleep 2
+done
 
 # ── Backend ───────────────────────────────────────────────────
+echo ""
 echo "  [..] Iniciando backend en http://localhost:8000 ..."
 cd "$BACKEND"
 source venv/bin/activate
@@ -31,6 +42,7 @@ echo "  [OK] Backend PID: $BACKEND_PID"
 sleep 2
 
 # ── Frontend ──────────────────────────────────────────────────
+echo ""
 echo "  [..] Iniciando frontend en http://localhost:3000 ..."
 cd "$FRONTEND"
 npm run dev &
@@ -47,5 +59,4 @@ echo ""
 # Detener ambos al hacer Ctrl+C
 trap "echo ''; echo 'Deteniendo...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" INT TERM
 
-# Mantener el script vivo mostrando los logs del backend
 wait $BACKEND_PID

@@ -11,6 +11,7 @@ from app.routers.estudiante import router as estudiante_router
 from app.routers.director import router as director_router
 from app.routers.coordinador import router as coordinador_router
 from app.routers.firmas import router as firmas_router
+from app.routers.documentos import router as documentos_router
 
 settings = get_settings()
 
@@ -31,6 +32,7 @@ app.add_middleware(
 )
 
 os.makedirs("uploads", exist_ok=True)
+os.makedirs("uploads/documentos", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 app.include_router(auth_router,        prefix=settings.API_V1_STR)
@@ -40,6 +42,7 @@ app.include_router(estudiante_router,  prefix=settings.API_V1_STR)
 app.include_router(director_router,    prefix=settings.API_V1_STR)
 app.include_router(coordinador_router, prefix=settings.API_V1_STR)
 app.include_router(firmas_router,      prefix=settings.API_V1_STR)
+app.include_router(documentos_router,  prefix=settings.API_V1_STR)
 
 
 @app.get("/")

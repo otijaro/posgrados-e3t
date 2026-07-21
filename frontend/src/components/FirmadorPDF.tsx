@@ -21,6 +21,7 @@ type FaseFirma = "ajustar" | "ubicar";
 export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
   const canvasRef    = useRef<HTMLCanvasElement>(null);
   const firmaPreview = useRef<HTMLCanvasElement>(null);
+  const renderTaskRef = useRef<any>(null); // ← para cancelar renders anteriores
 
   const [pdfDoc, setPdfDoc]             = useState<any>(null);
   const [pagina, setPagina]             = useState(1);
@@ -38,8 +39,7 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
   const [fase, setFase]             = useState<FaseFirma>("ajustar");
   const [preview, setPreview]       = useState({ x: 0, y: 0, visible: false });
   const [procesando, setProcesando] = useState(false);
-
-  // ── Cargar librerías ──────────────────────────────────────────────────────
+  const [firmado, setFirmado]       = useState(false);
 
   useEffect(() => {
     const s1 = document.createElement("script");
@@ -59,8 +59,6 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       .catch(() => {});
   }, []);
 
-  // ── Cargar PDF ────────────────────────────────────────────────────────────
-
   useEffect(() => {
     if (!pdfBase64) return;
     const cargar = async () => {
@@ -78,17 +76,34 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
 
   async function renderPagina() {
     if (!pdfDoc || !canvasRef.current) return;
-    const page   = await pdfDoc.getPage(pagina);
-    const vp     = page.getViewport({ scale: escala });
-    const canvas = canvasRef.current;
-    const ctx    = canvas.getContext("2d")!;
-    canvas.width  = vp.width;
-    canvas.height = vp.height;
-    await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    setPdfImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
-  }
 
-  // ── Preview firma en canvas ───────────────────────────────────────────────
+    // Cancelar render anterior si existe
+    if (renderTaskRef.current) {
+      try { renderTaskRef.current.cancel(); } catch (_) {}
+      renderTaskRef.current = null;
+    }
+
+    try {
+      const page   = await pdfDoc.getPage(pagina);
+      const vp     = page.getViewport({ scale: escala });
+      const canvas = canvasRef.current;
+      const ctx    = canvas.getContext("2d")!;
+      canvas.width  = vp.width;
+      canvas.height = vp.height;
+
+      const task = page.render({ canvasContext: ctx, viewport: vp });
+      renderTaskRef.current = task;
+      await task.promise;
+      renderTaskRef.current = null;
+
+      setPdfImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    } catch (e: any) {
+      // Ignorar errores de cancelación
+      if (e?.name !== "RenderingCancelledException") {
+        console.error("Error renderizando PDF:", e);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!canvasRef.current || !pdfImageData) return;
@@ -103,8 +118,6 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
     }
   }, [preview, firmaImg, escalaFirma, pdfImageData, fase]);
 
-  // ── Preview firma en panel ────────────────────────────────────────────────
-
   useEffect(() => {
     if (!firmaPreview.current || !firmaImg) return;
     const cvs   = firmaPreview.current;
@@ -116,8 +129,6 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
     ctx.drawImage(firmaImg, 0, 0, cvs.width, cvs.height);
   }, [firmaImg, escalaFirma, firmaW, firmaH]);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-
   function b64ToArr(b64: string): Uint8Array {
     const bin = atob(b64);
     const arr = new Uint8Array(bin.length);
@@ -126,12 +137,10 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
   }
 
   function arrToB64(bytes: Uint8Array): string {
-    // Convertir en chunks para evitar "Maximum call stack size exceeded"
     let bin = "";
     const CHUNK = 8192;
-    for (let i = 0; i < bytes.length; i += CHUNK) {
+    for (let i = 0; i < bytes.length; i += CHUNK)
       bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
-    }
     return btoa(bin);
   }
 
@@ -141,31 +150,26 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
     });
   }
 
-  // ── Procesar imagen de firma ──────────────────────────────────────────────
-
   function procesarFirma(dataUrl: string) {
     const img = new Image();
     img.src = dataUrl;
     img.onload = () => {
       const tmp = document.createElement("canvas");
-      tmp.width  = img.width;
-      tmp.height = img.height;
-      const ctx  = tmp.getContext("2d")!;
+      tmp.width = img.width; tmp.height = img.height;
+      const ctx = tmp.getContext("2d")!;
       ctx.drawImage(img, 0, 0);
       const data = ctx.getImageData(0, 0, tmp.width, tmp.height);
-      for (let i = 0; i < data.data.length; i += 4) {
+      for (let i = 0; i < data.data.length; i += 4)
         if (data.data[i] > 220 && data.data[i+1] > 220 && data.data[i+2] > 220)
           data.data[i+3] = 0;
-      }
       ctx.putImageData(data, 0, 0);
       const clean = tmp.toDataURL("image/png");
       setFirmaB64(clean.split(",")[1]);
-      setFirmaW(img.width);
-      setFirmaH(img.height);
+      setFirmaW(img.width); setFirmaH(img.height);
       setEscalaFirma(1.0);
       const imgEl = new Image();
       imgEl.src = clean;
-      imgEl.onload = () => { setFirmaImg(imgEl); setFase("ajustar"); };
+      imgEl.onload = () => { setFirmaImg(imgEl); setFase("ajustar"); setFirmado(false); };
     };
   }
 
@@ -178,12 +182,23 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
   function cargarFirmaPerfil(url: string) {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = url;
+    img.src = url + "?t=" + Date.now(); // evitar caché
     img.onload = () => {
       const tmp = document.createElement("canvas");
       tmp.width = img.width; tmp.height = img.height;
       tmp.getContext("2d")!.drawImage(img, 0, 0);
       procesarFirma(tmp.toDataURL("image/png"));
+    };
+    img.onerror = () => {
+      // Si falla por CORS, intentar fetch
+      fetch(url)
+        .then(r => r.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onload = e => procesarFirma(e.target!.result as string);
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => alert("No se pudo cargar la firma guardada"));
     };
   }
 
@@ -196,7 +211,11 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       .catch(() => {});
   }
 
-  // ── Firmar el PDF ─────────────────────────────────────────────────────────
+  function reiniciarFirma() {
+    setFirmado(false);
+    setFase("ajustar");
+    renderPagina();
+  }
 
   async function firmar(x: number, y: number) {
     if (!firmaB64 || !canvasRef.current) return;
@@ -217,7 +236,7 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       const h    = firmaH * escalaFirma * (height / canvas.height);
       page.drawImage(firmaEmbed, { x: pdfX - w/2, y: pdfY - h/2, width: w, height: h });
       const saved = await doc.save();
-      // ← Fix: usar chunks en vez de spread para no desbordar la pila
+      setFirmado(true);
       onFirmado(arrToB64(new Uint8Array(saved)));
     } catch (e) {
       alert("Error al firmar: " + e);
@@ -226,23 +245,21 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex flex-col">
 
       {/* Barra superior */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 flex-wrap">
         <h2 className="font-bold text-gray-800 text-sm">
-          {fase === "ajustar" ? "🔧 Ajustar tamaño de la firma" : "📍 Ubicar firma en el documento"}
+          {firmado ? "✅ Firma colocada" : fase === "ajustar" ? "🔧 Ajustar tamaño de la firma" : "📍 Ubicar firma en el documento"}
         </h2>
 
-        {/* Indicador de pasos */}
         <div className="flex items-center gap-1 text-xs ml-2">
           {[{ key: "ajustar", label: "1. Ajustar" }, { key: "ubicar", label: "2. Firmar" }].map((paso, i) => (
             <span key={paso.key} className="flex items-center gap-1">
               {i > 0 && <span className="text-gray-300">›</span>}
               <span className={`px-2 py-0.5 rounded-full font-medium ${
+                firmado ? "bg-green-100 text-green-700" :
                 fase === paso.key ? "bg-green-700 text-white" :
                 (fase === "ubicar" && paso.key === "ajustar") ? "bg-green-100 text-green-700" :
                 "bg-gray-100 text-gray-400"
@@ -251,25 +268,36 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
           ))}
         </div>
 
-        {/* Páginas */}
         <div className="flex items-center gap-2 text-xs text-gray-600 ml-auto">
           <button onClick={() => setPagina(p => Math.max(1, p-1))} className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">◀</button>
           <span>Pág. {pagina} / {totalPag}</span>
           <button onClick={() => setPagina(p => Math.min(totalPag, p+1))} className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">▶</button>
         </div>
-
-        {/* Zoom */}
         <div className="flex items-center gap-1 text-xs text-gray-600">
           <button onClick={() => setEscala(e => Math.max(0.5, e-0.2))} className="px-2 py-1 bg-gray-100 rounded">−</button>
           <span>{Math.round(escala*100)}%</span>
           <button onClick={() => setEscala(e => Math.min(4, e+0.2))} className="px-2 py-1 bg-gray-100 rounded">+</button>
         </div>
-
         <button onClick={onCerrar} className="text-gray-400 hover:text-red-600 text-xl font-bold ml-1">✕</button>
       </div>
 
-      {/* ── FASE 1: AJUSTAR ── */}
-      {fase === "ajustar" && (
+      {/* Banner firma colocada */}
+      {firmado && (
+        <div className="bg-green-50 border-b border-green-200 px-4 py-2 text-xs text-green-700 flex items-center justify-center gap-4">
+          <span>✅ Firma colocada correctamente</span>
+          <button onClick={reiniciarFirma}
+            className="bg-amber-500 text-white px-3 py-1 rounded-lg font-semibold hover:bg-amber-600">
+            🔄 Volver a firmar
+          </button>
+          <button onClick={onCerrar}
+            className="bg-green-700 text-white px-3 py-1 rounded-lg font-semibold hover:bg-green-800">
+            ✓ Aceptar firma
+          </button>
+        </div>
+      )}
+
+      {/* Fase 1: Ajustar */}
+      {!firmado && fase === "ajustar" && (
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-6 flex-wrap">
           <div className="flex items-center gap-2">
             <label className="cursor-pointer bg-green-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-green-800">
@@ -285,7 +313,6 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
               </button>
             )}
           </div>
-
           {firmaImg && (
             <>
               <div className="flex items-center gap-3 border-l pl-4">
@@ -314,8 +341,8 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
         </div>
       )}
 
-      {/* ── FASE 2: UBICAR ── */}
-      {fase === "ubicar" && (
+      {/* Fase 2: Ubicar */}
+      {!firmado && fase === "ubicar" && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700 text-center flex items-center justify-center gap-4">
           <span>🖱️ Mueve el mouse para ver la firma · <strong>Haz clic</strong> para colocarla</span>
           <button onClick={() => setFase("ajustar")} className="text-amber-700 underline hover:text-amber-900">
@@ -328,16 +355,16 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       <div className="flex-1 overflow-auto flex items-start justify-center p-4 bg-gray-700 relative">
         <canvas
           ref={canvasRef}
-          className={`shadow-2xl ${fase === "ubicar" && firmaImg ? "cursor-crosshair" : "cursor-default"}`}
+          className={`shadow-2xl ${!firmado && fase === "ubicar" && firmaImg ? "cursor-crosshair" : "cursor-default"}`}
           style={{ maxWidth: "100%" }}
           onMouseMove={e => {
-            if (fase !== "ubicar" || !firmaImg) return;
+            if (firmado || fase !== "ubicar" || !firmaImg) return;
             const r = canvasRef.current!.getBoundingClientRect();
             setPreview({ x: (e.clientX-r.left)*canvasRef.current!.width/r.width, y: (e.clientY-r.top)*canvasRef.current!.height/r.height, visible: true });
           }}
           onMouseLeave={() => setPreview(p => ({ ...p, visible: false }))}
           onClick={e => {
-            if (fase !== "ubicar" || !firmaImg) return;
+            if (firmado || fase !== "ubicar" || !firmaImg) return;
             const r = canvasRef.current!.getBoundingClientRect();
             firmar((e.clientX-r.left)*canvasRef.current!.width/r.width, (e.clientY-r.top)*canvasRef.current!.height/r.height);
           }}

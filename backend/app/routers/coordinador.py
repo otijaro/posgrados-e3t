@@ -18,7 +18,6 @@ from app.services.auth import get_current_user
 router = APIRouter(prefix="/coordinador", tags=["Coordinador"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
-# Query reutilizable para obtener IDs de docentes
 QUERY_IDS_DOCENTES = """
     SELECT DISTINCT p.id
     FROM persona p
@@ -41,6 +40,19 @@ def _get_coordinador(token: str, db: Session) -> Persona:
     if not persona:
         raise HTTPException(status_code=401, detail="Token inválido o expirado")
     return persona
+
+
+def _buscar_grupo_director(db: Session, id_persona: int) -> Optional[str]:
+    """Busca el grupo de investigación donde el docente es director. Tolerante a BD sin la columna."""
+    try:
+        row = db.execute(text("""
+            SELECT nombre FROM grupo_investigacion
+            WHERE id_director = :id AND activo = 1
+            LIMIT 1
+        """), {"id": id_persona}).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
 
 
 class AccionSolicitudBody(BaseModel):
@@ -124,7 +136,7 @@ def accion_solicitud(
 
     acciones_validas = {"aprobar", "rechazar", "devolver", "pasar_comite"}
     if body.accion not in acciones_validas:
-        raise HTTPException(status_code=400, detail=f"Acción inválida. Opciones: {acciones_validas}")
+        raise HTTPException(status_code=400, detail=f"Acción inválida.")
 
     estado_map = {
         "aprobar":      EstadoSolicitud.APROBADA,
@@ -132,9 +144,9 @@ def accion_solicitud(
         "devolver":     EstadoSolicitud.DEVUELTA,
         "pasar_comite": EstadoSolicitud.EN_COMITE,
     }
-    solicitud.estado              = estado_map[body.accion]
-    solicitud.respuesta           = body.observaciones
-    solicitud.id_quien_responde   = coordinador.id
+    solicitud.estado            = estado_map[body.accion]
+    solicitud.respuesta         = body.observaciones
+    solicitud.id_quien_responde = coordinador.id
 
     if body.accion == "aprobar":
         solicitud.fecha_aprobacion = datetime.utcnow()
@@ -152,7 +164,7 @@ def accion_solicitud(
 
     db.commit()
     return {
-        "mensaje":        f"Solicitud {body.accion}da exitosamente",
+        "mensaje":         f"Solicitud {body.accion}da exitosamente",
         "numero_radicado": solicitud.numero_radicado,
         "nuevo_estado":    solicitud.estado.value,
     }
@@ -208,7 +220,6 @@ def listar_docentes(
         r[0] for r in db.execute(text(QUERY_IDS_DOCENTES)).fetchall()
     ]
 
-    # Mapa persona → proyectos que dirige o codirige
     proyectos = db.query(ProyectoGrado).all()
     mapa: dict = {}
     for p in proyectos:
@@ -249,11 +260,8 @@ def listar_docentes(
                 "semestre":        est.semestre_actual,
             })
 
-        grupo = db.execute(text("""
-            SELECT nombre FROM grupo_investigacion
-            WHERE id_director = :id AND activo = 1
-            LIMIT 1
-        """), {"id": id_persona}).fetchone()
+        # Tolerante: si la columna id_director no existe aún, devuelve None
+        grupo = _buscar_grupo_director(db, id_persona)
 
         resultado.append({
             "id":                  id_persona,
@@ -263,7 +271,7 @@ def listar_docentes(
             "como_director":       len(data["director"]),
             "como_codirector":     len(data["codirector"]),
             "total_estudiantes":   len(data["director"]) + len(data["codirector"]),
-            "grupo_investigacion": grupo[0] if grupo else None,
+            "grupo_investigacion": grupo,
             "es_dir_grupo":        grupo is not None,
             "estudiantes":         estudiantes,
         })

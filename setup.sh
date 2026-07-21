@@ -4,7 +4,7 @@
 # Uso: bash setup.sh
 # ============================================================
 
-set -e  # Detener si hay error
+set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 BACKEND="$ROOT/backend"
@@ -23,7 +23,25 @@ docker-compose up -d
 echo "   Esperando que PostgreSQL esté listo..."
 sleep 5
 
-# ── 2. Backend — entorno virtual ────────────────────────────
+# ── 2. LibreOffice en Mac (para generar PDFs) ────────────────
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  echo ""
+  echo "📄 Verificando LibreOffice..."
+  if ! command -v soffice &>/dev/null && [ ! -f "/Applications/LibreOffice.app/Contents/MacOS/soffice" ]; then
+    echo "   LibreOffice no encontrado. Instalando con Homebrew..."
+    if command -v brew &>/dev/null; then
+      brew install --cask libreoffice
+      echo "   ✅ LibreOffice instalado"
+    else
+      echo "   ⚠️  Homebrew no encontrado. Instale LibreOffice manualmente:"
+      echo "   https://www.libreoffice.org/download/download/"
+    fi
+  else
+    echo "   ✅ LibreOffice ya instalado"
+  fi
+fi
+
+# ── 3. Backend — entorno virtual ─────────────────────────────
 echo ""
 echo "🐍 Configurando backend..."
 cd "$BACKEND"
@@ -39,7 +57,7 @@ echo "   Instalando dependencias..."
 pip install -q -r requirements.txt
 pip install -q pydantic-settings "psycopg[binary]"
 
-# ── 3. Crear tablas ──────────────────────────────────────────
+# ── 4. Crear tablas ──────────────────────────────────────────
 echo ""
 echo "🗄️  Creando tablas en la base de datos..."
 python3 -c "
@@ -49,16 +67,14 @@ Base.metadata.create_all(bind=engine)
 print('   ✅ Tablas creadas')
 "
 
-# ── 4. Datos iniciales ───────────────────────────────────────
+# ── 5. Datos iniciales ───────────────────────────────────────
 echo ""
 echo "🌱 Cargando datos iniciales..."
 
 python3 -c "
 from app.database import engine
 from sqlalchemy import text
-
 with engine.connect() as conn:
-    # Verificar si ya existen
     fac = conn.execute(text('SELECT COUNT(*) FROM facultad')).scalar()
     if fac == 0:
         conn.execute(text(\"INSERT INTO facultad (id, nombre, codigo) VALUES (1, 'Ingenierías Fisicomecánicas', 'FISI') ON CONFLICT (id) DO NOTHING\"))
@@ -66,7 +82,7 @@ with engine.connect() as conn:
         conn.commit()
         print('   ✅ Facultad y Escuela creadas')
     else:
-        print('   ⏭️  Facultad y Escuela ya existen')
+        print('   ⏭️  Ya existen')
 "
 
 echo "   📚 Cargando profesores..."
@@ -81,36 +97,26 @@ python3 seed_coordinador.py 2>&1 | tail -3
 echo "   📋 Cargando secretaria..."
 python3 seed_secretaria.py 2>&1 | tail -3
 
-echo "   🔑 Corriendo migraciones de firmas..."
+echo "   🔑 Migraciones..."
 python3 migracion_firmas.py 2>&1 | tail -3
-
-echo "   🔑 Migrando director de grupo..."
 python3 migracion_dir_grupo.py 2>&1 | tail -3
 
-# ── 5. Frontend ──────────────────────────────────────────────
+echo "   📁 Cargando documentos iniciales..."
+python3 seed_documentos.py 2>&1 | tail -3
+
+# ── 6. Frontend ──────────────────────────────────────────────
 echo ""
 echo "⚛️  Instalando dependencias del frontend..."
 cd "$FRONTEND"
 npm install --silent
 
-# ── 6. Listo ────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════╗"
 echo "║           ✅ Setup completado            ║"
 echo "╠══════════════════════════════════════════╣"
+echo "║  Para arrancar: bash start.sh            ║"
+echo "║  Abrir: http://localhost:3000            ║"
 echo "║                                          ║"
-echo "║  Para arrancar el proyecto:              ║"
-echo "║                                          ║"
-echo "║  Terminal 1 (backend):                   ║"
-echo "║  cd backend && source venv/bin/activate  ║"
-echo "║  uvicorn app.main:app --reload --port 8000║"
-echo "║                                          ║"
-echo "║  Terminal 2 (frontend):                  ║"
-echo "║  cd frontend && npm run dev              ║"
-echo "║                                          ║"
-echo "║  🌐 http://localhost:3000                ║"
-echo "║                                          ║"
-echo "║  Credenciales:                           ║"
 echo "║  Coordinador: omar.tijaro@uis.edu.co     ║"
 echo "║  Contraseña:  coordinador123             ║"
 echo "║  Juliam:      juliam2238321@correo...    ║"

@@ -1,0 +1,8 @@
+      {mostrarFirmador && pdfGenerado && (
+        <FirmadorPDF
+          pdfBase64={pdfGenerado}
+          soloVer={false}
+          onFirmado={handleFirmado}
+          onCerrar={() => setMostrarFirmador(false)}
+        />
+      )}

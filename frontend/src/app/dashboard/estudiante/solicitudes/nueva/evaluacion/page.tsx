@@ -5,12 +5,25 @@ import Link from "next/link";
 import { getProgramas, crearSolicitudEvaluacion, getMiPerfil, Programa, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
-const tiposEvaluacion = [
+// Tipos de evaluación según nivel del programa
+const TIPOS_DOCTORADO = [
+  "Examen de Candidatura",
+  "Propuesta de Investigación",
+  "Tesis Doctoral",
+];
+
+const TIPOS_MAESTRIA = [
   "Propuesta de Investigación",
   "Trabajo Final de Investigación",
-  "Tesis Doctoral",
-  "Examen de Candidatura",
 ];
+
+function getTiposEvaluacion(programa: string | null | undefined): string[] {
+  if (!programa) return [...TIPOS_DOCTORADO, ...TIPOS_MAESTRIA];
+  const p = programa.toLowerCase();
+  if (p.includes("doctorado")) return TIPOS_DOCTORADO;
+  if (p.includes("maestría") || p.includes("maestria")) return TIPOS_MAESTRIA;
+  return [...TIPOS_DOCTORADO, ...TIPOS_MAESTRIA];
+}
 
 type Jurado = { nombre: string; institucion: string; correo: string };
 const juradoVacio = (): Jurado => ({ nombre: "", institucion: "", correo: "" });
@@ -62,6 +75,9 @@ export default function SolicitudEvaluacionPage() {
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
   }, []);
+
+  // Resetear tipo_evaluacion si cambia el programa
+  const tiposDisponibles = getTiposEvaluacion(perfil?.programa);
 
   // ── Jurados ───────────────────────────────────────────────────────────────
 
@@ -167,17 +183,8 @@ export default function SolicitudEvaluacionPage() {
     );
   }
 
-  if (cargando) {
-    return <div className="flex items-center justify-center h-64 text-gray-400">Cargando información...</div>;
-  }
-
-  if (errorCarga) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700 text-sm">
-        ⚠️ {errorCarga}
-      </div>
-    );
-  }
+  if (cargando) return <div className="flex items-center justify-center h-64 text-gray-400">Cargando información...</div>;
+  if (errorCarga) return <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700 text-sm">⚠️ {errorCarga}</div>;
 
   const CampoReadonly = ({ label, valor }: { label: string; valor: string | null | undefined }) => (
     <div>
@@ -217,14 +224,10 @@ export default function SolicitudEvaluacionPage() {
             <span className="ml-auto text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Solo lectura</span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <CampoReadonly label="Nombre Completo" valor={user?.nombre_completo} />
-            </div>
+            <div className="md:col-span-2"><CampoReadonly label="Nombre Completo" valor={user?.nombre_completo} /></div>
             <CampoReadonly label="Correo Institucional" valor={user?.email_institucional} />
             <CampoReadonly label="Código Estudiantil"   valor={perfil?.codigo_estudiante} />
-            <div className="md:col-span-2">
-              <CampoReadonly label="Programa" valor={perfil?.programa} />
-            </div>
+            <div className="md:col-span-2"><CampoReadonly label="Programa" valor={perfil?.programa} /></div>
           </div>
         </div>
 
@@ -281,7 +284,9 @@ export default function SolicitudEvaluacionPage() {
               className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.tipo_evaluacion ? "border-red-400" : "border-gray-200"}`}
             >
               <option value="">Seleccionar tipo...</option>
-              {tiposEvaluacion.map((t) => <option key={t} value={t}>{t}</option>)}
+              {tiposDisponibles.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
             </select>
             {errors.tipo_evaluacion && <p className="text-red-500 text-xs mt-1">{errors.tipo_evaluacion}</p>}
           </div>

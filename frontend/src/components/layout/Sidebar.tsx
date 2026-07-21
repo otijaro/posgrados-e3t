@@ -14,6 +14,7 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Inicio",            href: "/dashboard/estudiante",             icon: "🏠", exacto: true },
     { label: "Mi Proyecto",       href: "/dashboard/estudiante/proyecto",    icon: "📄" },
     { label: "Solicitudes",       href: "/dashboard/estudiante/solicitudes", icon: "📋" },
+    { label: "Documentos",        href: "/dashboard/documentos",             icon: "📁" },
     { label: "Calendarios",       href: "/dashboard/calendarios",            icon: "📅" },
     { label: "Planes de Estudio", href: "/dashboard/planes-estudio",         icon: "📚" },
   ],
@@ -22,26 +23,30 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Notificaciones",  href: "/dashboard/director/notificaciones",   icon: "🔔" },
     { label: "Por firmar",      href: "/dashboard/director/solicitudes",      icon: "✍️" },
     { label: "Aval grupo inv.", href: "/dashboard/director/firmas-grupo",     icon: "🔬" },
+    { label: "Documentos",      href: "/dashboard/documentos",                icon: "📁" },
     { label: "Calendarios",     href: "/dashboard/calendarios",               icon: "📅" },
   ],
   coordinador: [
-    { label: "Inicio",      href: "/dashboard/coordinador",             icon: "🏠", exacto: true },
-    { label: "Solicitudes", href: "/dashboard/coordinador/solicitudes", icon: "📋" },
-    { label: "Por firmar",  href: "/dashboard/coordinador/firmas",      icon: "✍️" },
-    { label: "Estudiantes", href: "/dashboard/coordinador/estudiantes", icon: "🎓" },
-    { label: "Docentes",    href: "/dashboard/coordinador/docentes",    icon: "👨‍🏫" },
-    { label: "Calendarios", href: "/dashboard/calendarios",             icon: "📅" },
+    { label: "Inicio",      href: "/dashboard/coordinador",                  icon: "🏠", exacto: true },
+    { label: "Solicitudes", href: "/dashboard/coordinador/solicitudes",      icon: "📋" },
+    { label: "Por firmar",  href: "/dashboard/coordinador/firmas",           icon: "✍️" },
+    { label: "Estudiantes", href: "/dashboard/coordinador/estudiantes",      icon: "🎓" },
+    { label: "Docentes",    href: "/dashboard/coordinador/docentes",         icon: "👨‍🏫" },
+    { label: "Documentos",  href: "/dashboard/coordinador/documentos",       icon: "📁" },
+    { label: "Calendarios", href: "/dashboard/calendarios",                  icon: "📅" },
   ],
   secretaria: [
-    { label: "Inicio",      href: "/dashboard/secretaria",             icon: "🏠", exacto: true },
-    { label: "Solicitudes", href: "/dashboard/secretaria/solicitudes", icon: "📋" },
-    { label: "Por firmar",  href: "/dashboard/secretaria/firmas",      icon: "✍️" },
-    { label: "Estudiantes", href: "/dashboard/secretaria/estudiantes", icon: "🎓" },
-    { label: "Docentes",    href: "/dashboard/secretaria/docentes",    icon: "👨‍🏫" },
-    { label: "Calendarios", href: "/dashboard/calendarios",            icon: "📅" },
+    { label: "Inicio",      href: "/dashboard/secretaria",                   icon: "🏠", exacto: true },
+    { label: "Solicitudes", href: "/dashboard/secretaria/solicitudes",       icon: "📋" },
+    { label: "Por firmar",  href: "/dashboard/secretaria/firmas",            icon: "✍️" },
+    { label: "Estudiantes", href: "/dashboard/secretaria/estudiantes",       icon: "🎓" },
+    { label: "Docentes",    href: "/dashboard/secretaria/docentes",          icon: "👨‍🏫" },
+    { label: "Documentos",  href: "/dashboard/documentos",                   icon: "📁" },
+    { label: "Calendarios", href: "/dashboard/calendarios",                  icon: "📅" },
   ],
   comite: [
     { label: "Inicio",      href: "/dashboard/comite",      icon: "🏠", exacto: true },
+    { label: "Documentos",  href: "/dashboard/documentos",  icon: "📁" },
     { label: "Calendarios", href: "/dashboard/calendarios", icon: "📅" },
   ],
 };
@@ -87,10 +92,8 @@ export default function Sidebar() {
         getMisEstudiantes()
           .then((d) => setPendientes(d.reportes_pendientes_aval + d.solicitudes_pendientes))
           .catch(() => {});
-        // Por firmar como director de tesis
         fetch(`${API_URL}/api/firmas/pendientes/director`, { headers: h })
           .then(r => r.json()).then(d => setFirmasPendientes(Array.isArray(d) ? d.length : 0)).catch(() => {});
-        // Aval como director de grupo
         fetch(`${API_URL}/api/firmas/pendientes/dir_grupo`, { headers: h })
           .then(r => r.json()).then(d => setAvalGrupoPendientes(Array.isArray(d) ? d.length : 0)).catch(() => {});
       }
@@ -143,18 +146,17 @@ export default function Sidebar() {
 
       <nav className="flex-1 p-4 space-y-1 mt-2">
         {menuItems.map((item) => {
-          const activo        = isActive(pathname, item.href, item.exacto);
-          const esBadge       = (rol === "director" && item.label === "Notificaciones") ||
-                                ((rol === "coordinador" || rol === "secretaria") && item.label === "Solicitudes");
-          const esFirmas      = item.label === "Por firmar";
-          const esAvalGrupo   = item.label === "Aval grupo inv.";
+          const activo      = isActive(pathname, item.href, item.exacto);
+          const esBadge     = (rol === "director" && item.label === "Notificaciones") ||
+                              ((rol === "coordinador" || rol === "secretaria") && item.label === "Solicitudes");
+          const esFirmas    = item.label === "Por firmar";
+          const esAvalGrupo = item.label === "Aval grupo inv.";
 
           return (
             <Link key={item.href} href={item.href}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors ${
                 activo ? "bg-green-600 text-white font-semibold" : "text-green-200 hover:bg-green-700 hover:text-white"
-              }`}
-            >
+              }`}>
               <span>{item.icon}</span>
               <span className="flex-1">{item.label}</span>
               {esBadge && pendientes > 0 && (

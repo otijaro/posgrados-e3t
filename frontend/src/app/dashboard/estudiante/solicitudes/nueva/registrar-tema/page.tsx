@@ -288,7 +288,7 @@ export default function RegistrarTemaPage() {
     <>
       {mostrarFirmador && pdfGenerado && (
         <FirmadorPDF
-          pdfBase64={pdfFirmado ?? pdfGenerado}
+          pdfBase64={pdfGenerado}
           soloVer={false}
           onFirmado={handleFirmado}
           onCerrar={() => setMostrarFirmador(false)}
