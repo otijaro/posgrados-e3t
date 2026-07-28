@@ -2,6 +2,8 @@ import Link from "next/link";
 import Image from "next/image";
 import PublicNav from "@/components/layout/PublicNav";
 
+const NOTEBOOKLM_URL = "https://notebooklm.google.com/notebook/52adb20c-7579-4086-88ef-ab38f2626018";
+
 const programas = [
   { icono: "⚡", nombre: "Maestría en Ingeniería Electrónica",                   duracion: "4 semestres", creditos: 56, color: "border-blue-500",   bg: "bg-blue-50" },
   { icono: "🔌", nombre: "Maestría en Ingeniería Eléctrica",                     duracion: "4 semestres", creditos: 52, color: "border-yellow-500", bg: "bg-yellow-50" },
@@ -12,10 +14,10 @@ const programas = [
 ];
 
 const accesos = [
-  { icono: "📅", titulo: "Calendarios",             descripcion: "Fechas de admisiones, créditos condonables y académico.", href: "/calendarios",           color: "border-blue-400" },
-  { icono: "📚", titulo: "Planes de Estudio",        descripcion: "Consulta la malla curricular de cada programa.",          href: "/planes-estudio",        color: "border-purple-400" },
-  { icono: "🔬", titulo: "Grupos de Investigación",  descripcion: "Conoce los grupos y sus proyectos activos 2025.",         href: "/grupos-investigacion",  color: "border-teal-400" },
-  { icono: "🔐", titulo: "Portal de Gestión",        descripcion: "Accede a tus solicitudes, proyecto de grado y trámites.", href: "/login",                 color: "border-green-500" },
+  { icono: "📅", titulo: "Calendarios",            descripcion: "Fechas de admisiones, créditos condonables y académico.", href: "/calendarios",          color: "border-blue-400" },
+  { icono: "📚", titulo: "Planes de Estudio",       descripcion: "Consulta la malla curricular de cada programa.",          href: "/planes-estudio",       color: "border-purple-400" },
+  { icono: "🔬", titulo: "Grupos de Investigación", descripcion: "Conoce los grupos y sus proyectos activos 2025.",         href: "/grupos-investigacion", color: "border-teal-400" },
+  { icono: "🔐", titulo: "Portal de Gestión",       descripcion: "Accede a tus solicitudes, proyecto de grado y trámites.", href: "/login",                color: "border-green-500" },
 ];
 
 export default function LandingPage() {
@@ -35,7 +37,6 @@ export default function LandingPage() {
               <Image src="/E3T.png" alt="E3T" width={64} height={56} className="object-contain" />
             </div>
           </div>
-
           <div className="text-center">
             <span className="inline-block bg-green-700 text-green-200 text-xs font-semibold px-4 py-1.5 rounded-full mb-6 tracking-wide uppercase">
               Portal Académico
@@ -60,8 +61,51 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Reglamento General de Posgrados */}
+      <section className="py-14 px-6 bg-gray-50">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-2xl font-bold text-gray-800 text-center mb-2">📜 Reglamento General de Posgrados</h2>
+          <p className="text-gray-500 text-center mb-8">Consulta el Acuerdo 075 o hazle preguntas al asistente IA</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Visor del reglamento */}
+            <Link href="/reglamento"
+              className="group bg-white rounded-2xl border border-gray-200 p-7 shadow-sm hover:shadow-md transition-all flex items-center gap-5">
+              <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">
+                📄
+              </div>
+              <div>
+                <p className="text-base font-bold text-gray-800 group-hover:text-green-700 transition-colors">
+                  Ver Reglamento
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Acuerdo 075 — Consulta las normas, plazos y requisitos de los programas de posgrado
+                </p>
+                <span className="text-xs text-green-600 font-semibold mt-2 inline-block">Abrir →</span>
+              </div>
+            </Link>
+
+            {/* Chat IA */}
+            <a href={NOTEBOOKLM_URL} target="_blank" rel="noopener noreferrer"
+              className="group bg-white rounded-2xl border border-gray-200 p-7 shadow-sm hover:shadow-md transition-all flex items-center gap-5">
+              <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">
+                🤖
+              </div>
+              <div>
+                <p className="text-base font-bold text-gray-800 group-hover:text-blue-700 transition-colors">
+                  Pregúntale al Asistente IA
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Haz preguntas sobre el reglamento en lenguaje natural — respuestas basadas en el Acuerdo 075
+                </p>
+                <span className="text-xs text-blue-600 font-semibold mt-2 inline-block">Abrir NotebookLM →</span>
+              </div>
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* Accesos rápidos */}
-      <section className="py-20 px-6 bg-gray-50">
+      <section className="py-16 px-6 bg-white">
         <div className="max-w-5xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-800 text-center mb-3">¿Qué puedes hacer aquí?</h2>
           <p className="text-gray-500 text-center mb-12">
@@ -69,11 +113,8 @@ export default function LandingPage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {accesos.map((a) => (
-              <Link
-                key={a.href}
-                href={a.href}
-                className={`bg-white rounded-2xl p-6 border-t-4 ${a.color} shadow-sm hover:shadow-md transition-shadow flex flex-col items-center text-center`}
-              >
+              <Link key={a.href} href={a.href}
+                className={`bg-white rounded-2xl p-6 border-t-4 ${a.color} shadow-sm hover:shadow-md transition-shadow flex flex-col items-center text-center`}>
                 <span className="text-4xl mb-3">{a.icono}</span>
                 <h3 className="text-base font-bold text-gray-800 mb-2">{a.titulo}</h3>
                 <p className="text-xs text-gray-500">{a.descripcion}</p>
@@ -84,7 +125,7 @@ export default function LandingPage() {
       </section>
 
       {/* Programas */}
-      <section className="py-20 px-6">
+      <section className="py-16 px-6 bg-gray-50">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-2xl font-bold text-gray-800 text-center mb-3">Programas disponibles</h2>
           <p className="text-gray-500 text-center mb-12">

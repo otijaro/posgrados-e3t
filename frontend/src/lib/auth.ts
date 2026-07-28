@@ -40,24 +40,28 @@ export async function getMe(): Promise<UserInfo | null> {
   return res.json();
 }
 
+// Códigos de rol que corresponden al rol "director" en el sistema
+const ROLES_DIRECTOR = new Set([
+  "director",
+  "codirector",
+  "prof_planta",
+  "prof_catedra",
+  "docente",
+  "coordinador_grupo",
+  "evaluador",
+]);
+
 export function rolPrincipal(user: UserInfo): string {
-  // Orden de prioridad — secretaria va justo después de coordinador
-  const prioridad = ["comite", "coordinador", "secretaria", "director", "estudiante"];
-  const rolesNorm = user.roles.map((r) => r.toLowerCase()
-    .replace("secretaria", "secretaria")
-    .replace("coordinador de posgrados", "coordinador")
-    .replace("profesor planta", "director")
-    .replace("profesor cátedra", "director")
-    .replace("personal administrativo", "secretaria")
-  );
-  for (const p of prioridad) {
-    if (rolesNorm.includes(p) || user.roles.some(r =>
-      r.toLowerCase().includes(p) ||
-      (p === "secretaria" && r.toLowerCase().includes("secretaria")) ||
-      (p === "coordinador" && r.toLowerCase().includes("coordinador"))
-    )) return p;
-  }
-  return user.roles[0] ?? "estudiante";
+  const roles = user.roles.map(r => r.toLowerCase());
+
+  // Orden de prioridad
+  if (roles.some(r => r === "comite"))                   return "comite";
+  if (roles.some(r => r === "coordinador"))              return "coordinador";
+  if (roles.some(r => r === "secretaria"))               return "secretaria";
+  if (roles.some(r => ROLES_DIRECTOR.has(r)))            return "director";
+  if (roles.some(r => r === "estudiante"))               return "estudiante";
+
+  return "estudiante";
 }
 
 export function rutaPorRol(user: UserInfo): string {

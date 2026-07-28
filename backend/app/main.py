@@ -12,6 +12,7 @@ from app.routers.director import router as director_router
 from app.routers.coordinador import router as coordinador_router
 from app.routers.firmas import router as firmas_router
 from app.routers.documentos import router as documentos_router
+from app.routers.reglamento import router as reglamento_router
 
 settings = get_settings()
 
@@ -43,6 +44,7 @@ app.include_router(director_router,    prefix=settings.API_V1_STR)
 app.include_router(coordinador_router, prefix=settings.API_V1_STR)
 app.include_router(firmas_router,      prefix=settings.API_V1_STR)
 app.include_router(documentos_router,  prefix=settings.API_V1_STR)
+app.include_router(reglamento_router,  prefix=settings.API_V1_STR)
 
 
 @app.get("/")

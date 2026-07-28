@@ -3,7 +3,7 @@
 # Uso: Abrir PowerShell como Administrador y ejecutar .\setup.ps1
 # ============================================================
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $ROOT = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BACKEND = "$ROOT\backend"
 $FRONTEND = "$ROOT\frontend"
@@ -37,7 +37,6 @@ $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
 if (-not $pythonCmd) {
     Write-INFO "Python no encontrado. Instalando Python 3.11..."
     winget install --id Python.Python.3.11 --silent --accept-package-agreements --accept-source-agreements
-    # Refrescar PATH
     $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
     Write-OK "Python instalado"
 } else {
@@ -69,9 +68,10 @@ if (-not $dockerCmd) {
     Write-ERR "IMPORTANTE: Reinicie el PC, abra Docker Desktop y vuelva a ejecutar este script."
     exit 0
 } else {
-    # Verificar que Docker este corriendo
-    $dockerRunning = docker info 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    # Verificar que Docker este corriendo — ignorar warnings (solo revisar exit code)
+    $dockerInfo = docker info 2>&1
+    $dockerOk   = $dockerInfo | Where-Object { $_ -match "Server Version" }
+    if (-not $dockerOk) {
         Write-ERR "Docker esta instalado pero no esta corriendo."
         Write-ERR "Abra Docker Desktop, espere a que inicie y vuelva a ejecutar este script."
         exit 1
@@ -149,11 +149,12 @@ python seed_coordinador.py 2>&1 | Select-Object -Last 4
 Write-INFO "Cargando secretaria..."
 python seed_secretaria.py 2>&1 | Select-Object -Last 4
 
-Write-INFO "Aplicando migraciones de firmas..."
+Write-INFO "Aplicando migraciones..."
 python migracion_firmas.py 2>&1 | Select-Object -Last 4
-
-Write-INFO "Aplicando migracion director de grupo..."
 python migracion_dir_grupo.py 2>&1 | Select-Object -Last 4
+
+Write-INFO "Cargando documentos iniciales..."
+python seed_documentos.py 2>&1 | Select-Object -Last 4
 
 Write-OK "Datos cargados correctamente"
 
@@ -170,21 +171,8 @@ Write-Host "============================================" -ForegroundColor Green
 Write-Host "   SETUP COMPLETADO EXITOSAMENTE" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Para arrancar el proyecto ejecute:" -ForegroundColor White
-Write-Host "  .\start.ps1" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "  O manualmente en 2 terminales:" -ForegroundColor White
-Write-Host ""
-Write-Host "  Terminal 1 (backend):" -ForegroundColor Yellow
-Write-Host "  cd backend" -ForegroundColor Gray
-Write-Host "  venv\Scripts\activate" -ForegroundColor Gray
-Write-Host "  uvicorn app.main:app --reload --port 8000" -ForegroundColor Gray
-Write-Host ""
-Write-Host "  Terminal 2 (frontend):" -ForegroundColor Yellow
-Write-Host "  cd frontend" -ForegroundColor Gray
-Write-Host "  npm run dev" -ForegroundColor Gray
-Write-Host ""
-Write-Host "  Abrir en el navegador: http://localhost:3000" -ForegroundColor Cyan
+Write-Host "  Para arrancar: .\start.ps1" -ForegroundColor Cyan
+Write-Host "  Abrir: http://localhost:3000" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Credenciales:" -ForegroundColor White
 Write-Host "  Coordinador : omar.tijaro@uis.edu.co  / coordinador123" -ForegroundColor Gray

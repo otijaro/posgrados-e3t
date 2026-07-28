@@ -15,6 +15,7 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Mi Proyecto",       href: "/dashboard/estudiante/proyecto",    icon: "📄" },
     { label: "Solicitudes",       href: "/dashboard/estudiante/solicitudes", icon: "📋" },
     { label: "Documentos",        href: "/dashboard/documentos",             icon: "📁" },
+    { label: "Reglamento",        href: "/dashboard/reglamento",             icon: "📜" },
     { label: "Calendarios",       href: "/dashboard/calendarios",            icon: "📅" },
     { label: "Planes de Estudio", href: "/dashboard/planes-estudio",         icon: "📚" },
   ],
@@ -24,6 +25,7 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Por firmar",      href: "/dashboard/director/solicitudes",      icon: "✍️" },
     { label: "Aval grupo inv.", href: "/dashboard/director/firmas-grupo",     icon: "🔬" },
     { label: "Documentos",      href: "/dashboard/documentos",                icon: "📁" },
+    { label: "Reglamento",      href: "/dashboard/reglamento",                icon: "📜" },
     { label: "Calendarios",     href: "/dashboard/calendarios",               icon: "📅" },
   ],
   coordinador: [
@@ -33,6 +35,7 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Estudiantes", href: "/dashboard/coordinador/estudiantes",      icon: "🎓" },
     { label: "Docentes",    href: "/dashboard/coordinador/docentes",         icon: "👨‍🏫" },
     { label: "Documentos",  href: "/dashboard/coordinador/documentos",       icon: "📁" },
+    { label: "Reglamento",  href: "/dashboard/reglamento",                   icon: "📜" },
     { label: "Calendarios", href: "/dashboard/calendarios",                  icon: "📅" },
   ],
   secretaria: [
@@ -42,18 +45,20 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Estudiantes", href: "/dashboard/secretaria/estudiantes",       icon: "🎓" },
     { label: "Docentes",    href: "/dashboard/secretaria/docentes",          icon: "👨‍🏫" },
     { label: "Documentos",  href: "/dashboard/documentos",                   icon: "📁" },
+    { label: "Reglamento",  href: "/dashboard/reglamento",                   icon: "📜" },
     { label: "Calendarios", href: "/dashboard/calendarios",                  icon: "📅" },
   ],
   comite: [
     { label: "Inicio",      href: "/dashboard/comite",      icon: "🏠", exacto: true },
     { label: "Documentos",  href: "/dashboard/documentos",  icon: "📁" },
+    { label: "Reglamento",  href: "/dashboard/reglamento",  icon: "📜" },
     { label: "Calendarios", href: "/dashboard/calendarios", icon: "📅" },
   ],
 };
 
 const rolLabel: Record<string, string> = {
   estudiante:  "Estudiante",
-  director:    "Director",
+  director:    "Docente",
   coordinador: "Coordinador",
   secretaria:  "Secretaria",
   comite:      "Comité",
@@ -116,7 +121,7 @@ export default function Sidebar() {
     else { const r = localStorage.getItem("rol_activo"); if (r) setRol(r); }
   }, [pathname]);
 
-  function handleLogout() { logout(); router.push("/login"); }
+  function handleLogout() { logout(); router.push("/"); }
 
   const menuItems = menus[rol] ?? menus["estudiante"];
 

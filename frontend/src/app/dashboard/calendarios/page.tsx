@@ -11,6 +11,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/1tUhHg3gj8dotOlz2mM8V-kIYVCK4g4WM/view?usp=drive_link",
     icono: "🎓",
     color: "border-blue-500",
+    bg: "bg-blue-50",
     badge: "bg-blue-100 text-blue-800",
   },
   {
@@ -21,6 +22,7 @@ const calendarios = [
     url: "https://convocatorias.uis.edu.co/convocatoria-creditos-educativos-para-investigacion-minciencias/",
     icono: "💰",
     color: "border-yellow-500",
+    bg: "bg-yellow-50",
     badge: "bg-yellow-100 text-yellow-800",
   },
   {
@@ -31,6 +33,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/1HJdNp-dtNPOp7AsBL913mWYFdN8bskc3/view?usp=drive_link",
     icono: "📅",
     color: "border-blue-500",
+    bg: "bg-blue-50",
     badge: "bg-blue-100 text-blue-800",
   },
   {
@@ -41,6 +44,7 @@ const calendarios = [
     url: "https://documentos.uis.edu.co/wp-content/uploads/2025/09/acuerdo-252-del-23-de-septiembre-de-2025-consejo-academico.pdf",
     icono: "🏫",
     color: "border-green-500",
+    bg: "bg-green-50",
     badge: "bg-green-100 text-green-800",
   },
   {
@@ -51,6 +55,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/1Nxw5SRkhKa6rZY-7OLachefh-sVEFff2/view?usp=sharing",
     icono: "📋",
     color: "border-orange-500",
+    bg: "bg-orange-50",
     badge: "bg-orange-100 text-orange-800",
   },
   {
@@ -61,6 +66,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/12i16gLuy4A2R3q5E_ZQQZWuUFONMQ4tH/view?usp=drive_link",
     icono: "🌐",
     color: "border-purple-500",
+    bg: "bg-purple-50",
     badge: "bg-purple-100 text-purple-800",
   },
   {
@@ -71,6 +77,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/1tUhHg3gj8dotOlz2mM8V-kIYVCK4g4WM/view?usp=drive_link",
     icono: "📋",
     color: "border-orange-500",
+    bg: "bg-orange-50",
     badge: "bg-orange-100 text-orange-800",
   },
   {
@@ -81,6 +88,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/16E9eDisdDoq1DA7L6ymTIgo6kFnii-Oq/view?usp=drive_link",
     icono: "🏆",
     color: "border-teal-500",
+    bg: "bg-teal-50",
     badge: "bg-teal-100 text-teal-800",
   },
   {
@@ -91,6 +99,7 @@ const calendarios = [
     url: "https://drive.google.com/file/d/1PdFouTAKuGOU3WRAflJ-kNOiblalXXX/view?usp=sharing",
     icono: "🌍",
     color: "border-teal-500",
+    bg: "bg-teal-50",
     badge: "bg-teal-100 text-teal-800",
   },
   {
@@ -101,18 +110,12 @@ const calendarios = [
     url: "https://drive.google.com/file/d/1xFgKG-y6qo21sDSBfJnA4b5LlsFS41-x/view?usp=sharing",
     icono: "🚀",
     color: "border-teal-500",
+    bg: "bg-teal-50",
     badge: "bg-teal-100 text-teal-800",
   },
 ];
 
 const categorias = ["Todos", ...Array.from(new Set(calendarios.map((c) => c.categoria)))];
-
-function getPreviewUrl(url: string): string | null {
-  const driveMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
-  if (driveMatch) return `https://drive.google.com/file/d/${driveMatch[1]}/preview`;
-  if (url.endsWith(".pdf")) return url;
-  return null;
-}
 
 export default function CalendariosPage() {
   const [categoriaActiva, setCategoriaActiva] = useState("Todos");
@@ -124,7 +127,6 @@ export default function CalendariosPage() {
 
   return (
     <div className="space-y-8">
-      {/* Encabezado */}
       <div>
         <h1 className="text-2xl font-bold text-gray-800">📅 Calendarios</h1>
         <p className="text-gray-500 mt-1">
@@ -132,7 +134,7 @@ export default function CalendariosPage() {
         </p>
       </div>
 
-      {/* Filtros por categoría */}
+      {/* Filtros */}
       <div className="flex flex-wrap gap-2">
         {categorias.map((cat) => (
           <button
@@ -154,65 +156,41 @@ export default function CalendariosPage() {
         ))}
       </div>
 
-      {/* Contador */}
       <p className="text-sm text-gray-400">
         Mostrando <span className="font-semibold text-gray-600">{filtrados.length}</span> calendario{filtrados.length !== 1 ? "s" : ""}
         {categoriaActiva !== "Todos" && ` en "${categoriaActiva}"`}
       </p>
 
-      {/* Grid de calendarios */}
+      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filtrados.map((cal) => {
-          const previewUrl = getPreviewUrl(cal.url);
-          return (
-            <div
-              key={cal.id}
-              className={`bg-white rounded-xl shadow-sm border-l-4 overflow-hidden hover:shadow-md transition-shadow flex flex-col ${cal.color}`}
-            >
-              {/* Previsualización */}
-              {previewUrl ? (
-                <div className="h-48 bg-gray-100 relative overflow-hidden">
-                  <iframe
-                    src={previewUrl}
-                    className="w-full h-full border-0 pointer-events-none"
-                    title={cal.titulo}
-                  />
-                  <a
-                    href={cal.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="absolute inset-0 flex items-end justify-end p-3"
-                  >
-                    <span className="bg-black bg-opacity-50 text-white text-xs px-3 py-1 rounded-full hover:bg-opacity-70 transition-all">
-                      🔍 Abrir documento
-                    </span>
-                  </a>
-                </div>
-              ) : (
-                <div className="h-48 flex items-center justify-center bg-gray-50 text-6xl">
-                  {cal.icono}
-                </div>
-              )}
-
-              {/* Contenido */}
-              <div className="p-5 flex flex-col flex-1">
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full w-fit mb-3 ${cal.badge}`}>
-                  {cal.categoria}
-                </span>
-                <h3 className="text-sm font-bold text-gray-800 leading-snug mb-2">{cal.titulo}</h3>
-                <p className="text-xs text-gray-500 leading-relaxed flex-1">{cal.descripcion}</p>
-                <a
-                  href={cal.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 w-full text-center text-sm bg-green-700 text-white py-2.5 rounded-lg hover:bg-green-800 transition-colors font-semibold"
-                >
-                  Ver calendario →
-                </a>
-              </div>
+        {filtrados.map((cal) => (
+          <div
+            key={cal.id}
+            className={`bg-white rounded-xl shadow-sm border-l-4 overflow-hidden hover:shadow-md transition-shadow flex flex-col ${cal.color}`}
+          >
+            {/* Preview — ícono grande con fondo de color */}
+            <div className={`h-40 flex flex-col items-center justify-center gap-2 ${cal.bg}`}>
+              <span className="text-6xl">{cal.icono}</span>
+              <span className={`text-xs font-semibold px-3 py-1 rounded-full ${cal.badge}`}>
+                {cal.categoria}
+              </span>
             </div>
-          );
-        })}
+
+            {/* Contenido */}
+            <div className="p-5 flex flex-col flex-1">
+              <h3 className="text-sm font-bold text-gray-800 leading-snug mb-2">{cal.titulo}</h3>
+              <p className="text-xs text-gray-500 leading-relaxed flex-1">{cal.descripcion}</p>
+              <a
+                href={cal.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 w-full text-center text-sm bg-green-700 text-white py-2.5 rounded-lg hover:bg-green-800 transition-colors font-semibold"
+              >
+                Ver calendario →
+              </a>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
