@@ -1,0 +1,4 @@
+# Fuerza LF (Unix) para scripts de shell, sin importar la config de Git del sistema.
+# Evita el bug "Illegal option -" en entrypoint.sh cuando alguien clona en Windows
+# con core.autocrlf=true (que convierte LF -> CRLF y rompe el script dentro del contenedor).
+*.sh text eol=lf
