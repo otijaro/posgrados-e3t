@@ -29,7 +29,7 @@ const ESTADO_BADGE: Record<string, string> = {
   reserva:     "bg-orange-100 text-orange-700",
 };
 
-function authH() {
+function authH(): Record<string, string> {
   const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   return t ? { Authorization: `Bearer ${t}` } : {};
 }

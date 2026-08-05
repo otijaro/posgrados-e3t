@@ -5,9 +5,9 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 
 const navLinks = [
-  { label: "Calendarios",          href: "/calendarios" },
-  { label: "Planes de Estudio",    href: "/planes-estudio" },
-  { label: "Grupos de Investigación", href: "/grupos-investigacion" },
+  { label: "Calendarios",             href: "/calendarios",          icono: "📅" },
+  { label: "Planes de Estudio",       href: "/planes-estudio",        icono: "📚" },
+  { label: "Grupos de Investigación", href: "/grupos-investigacion",  icono: "🔬" },
 ];
 
 export default function PublicNav() {
@@ -15,7 +15,7 @@ export default function PublicNav() {
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 h-12 flex items-center justify-between">
 
         {/* Logos */}
         <Link href="/" className="flex items-center gap-3">
@@ -33,12 +33,13 @@ export default function PublicNav() {
             <Link
               key={link.href}
               href={link.href}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                 pathname === link.href
                   ? "bg-green-50 text-green-700"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               }`}
             >
+              <span>{link.icono}</span>
               {link.label}
             </Link>
           ))}

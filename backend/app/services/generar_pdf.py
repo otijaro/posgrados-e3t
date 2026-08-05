@@ -1,6 +1,6 @@
 """
 Genera el PDF del formulario de inscripción de tema pre-llenado.
-Funciona en Windows (docx2pdf/Word), Mac (LibreOffice) y Linux (LibreOffice).
+Funciona en Windows (LibreOffice o Word), Mac (LibreOffice) y Linux (LibreOffice).
 """
 import os, shutil, tempfile, zipfile, subprocess, sys
 from datetime import date
@@ -10,22 +10,10 @@ DOCX_TEMPLATE = os.path.join(os.path.dirname(__file__), "..", "..", "assets", "f
 TAG = "<w:t>XX</w:t>"
 
 CAMPOS_EN_ORDEN = [
-    "titulo",               # [1]
-    "anio",                 # [2]
-    "mes",                  # [3]
-    "dia",                  # [4]
-    "programa",             # [5]
-    "linea_estrategica",    # [6]
-    "grupo_investigacion",  # [7]
-    "autor",                # [8]
-    "codigo",               # [9]
-    "area_formacion",       # [10]
-    "director",             # [11]
-    "codirector",           # [12]
-    "codirector_cargo",     # [13]
-    "codirector_entidad",   # [14]
-    "objetivo_general",     # [15]
-    "descripcion_alcances", # [16]
+    "titulo", "anio", "mes", "dia", "programa", "linea_estrategica",
+    "grupo_investigacion", "autor", "codigo", "area_formacion",
+    "director", "codirector", "codirector_cargo", "codirector_entidad",
+    "objetivo_general", "descripcion_alcances",
 ]
 
 
@@ -37,82 +25,84 @@ def escapar(v: str) -> str:
             .replace('"', "&quot;"))
 
 
-def _convertir_con_libreoffice(docx_path: str, output_dir: str) -> str:
-    """Convierte docx a PDF usando LibreOffice."""
-    # Rutas posibles de LibreOffice en Mac y Linux
-    candidatos = [
-        "libreoffice",
-        "soffice",
-        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-        "/usr/bin/libreoffice",
-        "/usr/bin/soffice",
-    ]
-    cmd = None
-    for c in candidatos:
+# Rutas de LibreOffice según SO
+LIBREOFFICE_CANDIDATOS = [
+    # Mac
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    # Linux
+    "/usr/bin/libreoffice",
+    "/usr/bin/soffice",
+    # Windows — rutas comunes
+    r"C:\Program Files\LibreOffice\program\soffice.exe",
+    r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+    # En PATH
+    "soffice",
+    "libreoffice",
+]
+
+
+def _buscar_libreoffice() -> str | None:
+    for c in LIBREOFFICE_CANDIDATOS:
         try:
             subprocess.run([c, "--version"], capture_output=True, timeout=5)
-            cmd = c
-            break
+            return c
         except Exception:
             continue
+    return None
 
+
+def _convertir_con_libreoffice(docx_path: str, output_dir: str) -> str:
+    cmd = _buscar_libreoffice()
     if not cmd:
-        raise RuntimeError("LibreOffice no encontrado. Instálelo desde https://www.libreoffice.org")
+        raise RuntimeError("LibreOffice no encontrado.")
 
     result = subprocess.run(
         [cmd, "--headless", "--convert-to", "pdf", "--outdir", output_dir, docx_path],
-        capture_output=True, text=True, timeout=60
+        capture_output=True, text=True, timeout=120
     )
     if result.returncode != 0:
         raise RuntimeError(f"LibreOffice error: {result.stderr}")
 
     pdf_name = os.path.splitext(os.path.basename(docx_path))[0] + ".pdf"
-    return os.path.join(output_dir, pdf_name)
+    pdf_path = os.path.join(output_dir, pdf_name)
+    if not os.path.exists(pdf_path):
+        raise RuntimeError("LibreOffice no generó el PDF")
+    return pdf_path
 
 
 def _convertir_con_docx2pdf(docx_path: str, output_path: str) -> str:
-    """Convierte docx a PDF usando docx2pdf (requiere Word en Windows/Mac)."""
     from docx2pdf import convert
     convert(docx_path, output_path)
+    if not os.path.exists(output_path):
+        raise RuntimeError("docx2pdf no generó el PDF")
     return output_path
 
 
 def _convertir_docx_a_pdf(docx_path: str, output_dir: str) -> str:
     """
-    Intenta convertir el docx a PDF usando el método disponible en el sistema.
-    Orden de preferencia: LibreOffice → docx2pdf
+    Intenta convertir con LibreOffice primero (disponible en todos los SO),
+    luego fallback a docx2pdf (Word) en Windows/Mac.
     """
-    # En Mac/Linux intentar LibreOffice primero
-    if sys.platform in ("darwin", "linux"):
-        try:
-            return _convertir_con_libreoffice(docx_path, output_dir)
-        except Exception as e_libre:
-            # Fallback a docx2pdf si LibreOffice no está
-            try:
-                output_pdf = os.path.join(output_dir, "formulario_prellenado.pdf")
-                return _convertir_con_docx2pdf(docx_path, output_pdf)
-            except Exception as e_docx:
-                raise RuntimeError(
-                    f"No se pudo convertir el PDF.\n"
-                    f"LibreOffice: {e_libre}\n"
-                    f"docx2pdf: {e_docx}\n"
-                    f"Instale LibreOffice desde https://www.libreoffice.org"
-                )
-    else:
-        # En Windows usar docx2pdf (Word)
-        try:
-            output_pdf = os.path.join(output_dir, "formulario_prellenado.pdf")
-            return _convertir_con_docx2pdf(docx_path, output_pdf)
-        except Exception as e:
-            # Fallback a LibreOffice en Windows si no hay Word
-            try:
-                return _convertir_con_libreoffice(docx_path, output_dir)
-            except Exception as e_libre:
-                raise RuntimeError(
-                    f"No se pudo convertir el PDF.\n"
-                    f"docx2pdf: {e}\n"
-                    f"LibreOffice: {e_libre}"
-                )
+    errores = []
+
+    # 1. Intentar LibreOffice (funciona en Mac, Linux y Windows si está instalado)
+    try:
+        return _convertir_con_libreoffice(docx_path, output_dir)
+    except Exception as e:
+        errores.append(f"LibreOffice: {e}")
+
+    # 2. Fallback: docx2pdf con Word (solo Windows/Mac con Word instalado)
+    try:
+        output_pdf = os.path.join(output_dir, "formulario_prellenado.pdf")
+        return _convertir_con_docx2pdf(docx_path, output_pdf)
+    except Exception as e:
+        errores.append(f"docx2pdf/Word: {e}")
+
+    raise RuntimeError(
+        "No se pudo convertir el DOCX a PDF.\n"
+        + "\n".join(errores)
+        + "\n\nInstale LibreOffice desde https://www.libreoffice.org"
+    )
 
 
 def generar_pdf_tema(datos: dict) -> bytes:
@@ -149,7 +139,6 @@ def generar_pdf_tema(datos: dict) -> bytes:
         with open(doc_path, "w", encoding="utf-8") as f:
             f.write(xml)
 
-        # Reempacar como docx
         output_docx = os.path.join(tmpdir, "formulario_prellenado.docx")
         with zipfile.ZipFile(output_docx, 'w', zipfile.ZIP_DEFLATED) as zout:
             for root, dirs, files in os.walk(tmpdir):
@@ -160,11 +149,7 @@ def generar_pdf_tema(datos: dict) -> bytes:
                     arcname  = os.path.relpath(filepath, tmpdir)
                     zout.write(filepath, arcname)
 
-        # Convertir a PDF
         output_pdf = _convertir_docx_a_pdf(output_docx, tmpdir)
-
-        if not os.path.exists(output_pdf):
-            raise FileNotFoundError("No se generó el PDF")
 
         with open(output_pdf, "rb") as f:
             return f.read()

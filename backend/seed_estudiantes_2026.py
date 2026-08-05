@@ -179,7 +179,7 @@ def buscar_director(nombre_director):
     return p
 
 def extraer_codigo(correo):
-    m = re.search(r'(\d{7,})', correo)
+    m = re.search(r'(\d{7,}[a-z]?)', correo)
     return m.group(1) if m else correo.split("@")[0][-7:]
 
 # ── Main ──────────────────────────────────────────────────────────────────────

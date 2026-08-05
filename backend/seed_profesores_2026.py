@@ -155,6 +155,13 @@ def vincular_rol(persona_id, rol_id):
             es_activo=1,
         ))
 
+def generar_correo_temporal(nombre):
+    """Genera un correo provisional para personas sin correo en la fuente de datos.
+    email_institucional es NOT NULL en la BD, así que no podemos insertar None."""
+    import re
+    slug = re.sub(r'[^a-z.]', '', nombre.lower().replace(" ", "."))[:30]
+    return f"{slug}@pendiente.uis.edu.co"
+
 def buscar_persona(nombre, correo):
     if correo:
         p = db.query(Persona).filter(Persona.email_institucional == correo).first()
@@ -203,7 +210,7 @@ try:
             else:
                 persona = Persona(
                     nombre_completo=nombre,
-                    email_institucional=correo if correo else None,
+                    email_institucional=correo if correo else generar_correo_temporal(nombre),
                     telefono=celular if celular else None,
                     hashed_password=hash_password("uis2026"),
                 )

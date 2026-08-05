@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from "react";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const NOTEBOOKLM_URL = "https://notebooklm.google.com/notebook/52adb20c-7579-4086-88ef-ab38f2626018";
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }

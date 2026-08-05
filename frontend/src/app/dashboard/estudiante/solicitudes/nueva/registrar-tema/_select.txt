@@ -1,0 +1,9 @@
+                <select
+                  value={grupoInv}
+                  onChange={e => { setGrupoInv(e.target.value); setErrors(p => ({ ...p, grupo_inv: "" })); }}
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white appearance-none ${errors.grupo_inv ? "border-red-400 bg-red-50" : "border-gray-200"}`}>
+                  <option value="">Seleccionar grupo...</option>
+                  {grupos.map(g => (
+                    <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                  ))}
+                </select>

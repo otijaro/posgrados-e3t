@@ -11,10 +11,12 @@ const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: fal
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const LINK_LINEA = "https://www.uis.edu.co/webUIS/es/academia/facultades/fisicoMecanicas/escuelas/e3t/nuestraEscuela/trabajoGrado.html";
 
-function authHeaders() {
+function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+interface GrupoInv { id: number; nombre: string; }
 
 const CampoReadonly = memo(({ label, valor }: { label: string; valor?: string | null }) => (
   <div>
@@ -65,9 +67,10 @@ const CampoPersona = memo(({
 CampoPersona.displayName = "CampoPersona";
 
 export default function RegistrarTemaPage() {
-  const [user, setUser]     = useState<UserInfo | null>(null);
-  const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
-  const [cargando, setCargando]     = useState(true);
+  const [user, setUser]         = useState<UserInfo | null>(null);
+  const [perfil, setPerfil]     = useState<EstudianteInfo | null>(null);
+  const [grupos, setGrupos]     = useState<GrupoInv[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
   const [dirNombre, setDirNombre]               = useState("");
@@ -97,15 +100,19 @@ export default function RegistrarTemaPage() {
   const [generandoPDF, setGenerandoPDF]       = useState(false);
   const [generandoVer, setGenerandoVer]       = useState(false);
 
-  // Visor embebido
-  const [visorUrl, setVisorUrl]   = useState<string | null>(null);
-  const visorRef                  = useRef<HTMLDivElement>(null);
-  const prevVisorUrl              = useRef<string | null>(null);
+  const [visorUrl, setVisorUrl] = useState<string | null>(null);
+  const visorRef                = useRef<HTMLDivElement>(null);
+  const prevVisorUrl            = useRef<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil()])
-      .then(([u, p]) => {
+    Promise.all([
+      getMe(),
+      getMiPerfil(),
+      fetch(`${API_URL}/api/programas/grupos-investigacion`).then(r => r.json()).catch(() => []),
+    ])
+      .then(([u, p, grps]) => {
         setUser(u); setPerfil(p);
+        setGrupos(Array.isArray(grps) ? grps : []);
         setDirNombre(p.proyecto?.director   ?? "");
         setCodNombre(p.proyecto?.codirector ?? "");
         setTitulo(p.proyecto?.titulo        ?? "");
@@ -124,19 +131,11 @@ export default function RegistrarTemaPage() {
   const onCodCorreo = useCallback((v: string) => { setCodCorreo(v); setErrors(p => ({ ...p, codirector_correo: "" })); }, []);
 
   const getDatosFormulario = () => ({
-    titulo,
-    programa:             perfil?.programa ?? "",
-    autor:                user?.nombre_completo ?? "",
-    codigo:               perfil?.codigo_estudiante ?? "",
-    director:             dirNombre,
-    codirector:           codNombre,
-    codirector_cargo:     codCargo,
-    codirector_entidad:   codEntidad,
-    linea_estrategica:    lineaEstrategica,
-    grupo_investigacion:  grupoInv,
-    area_formacion:       areaFormacion,
-    objetivo_general:     objetivo,
-    descripcion_alcances: alcances,
+    titulo, programa: perfil?.programa ?? "", autor: user?.nombre_completo ?? "",
+    codigo: perfil?.codigo_estudiante ?? "", director: dirNombre,
+    codirector: codNombre, codirector_cargo: codCargo, codirector_entidad: codEntidad,
+    linea_estrategica: lineaEstrategica, grupo_investigacion: grupoInv,
+    area_formacion: areaFormacion, objetivo_general: objetivo, descripcion_alcances: alcances,
   });
 
   const fetchPDF = async (): Promise<string> => {
@@ -149,7 +148,6 @@ export default function RegistrarTemaPage() {
     return (await res.json()).pdf_base64;
   };
 
-  // ── Muestra un PDF base64 en el visor embebido y hace scroll ───────────────
   const mostrarEnVisor = useCallback((b64: string) => {
     const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     const blob  = new Blob([bytes], { type: "application/pdf" });
@@ -160,47 +158,29 @@ export default function RegistrarTemaPage() {
     setTimeout(() => visorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   }, []);
 
-  // Previsualizar → genera y muestra en visor
   const handlePrevisualizar = async () => {
-    setGenerandoVer(true);
-    setErrorServidor(null);
-    try {
-      mostrarEnVisor(await fetchPDF());
-    } catch (err: unknown) {
-      setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF");
-    } finally {
-      setGenerandoVer(false);
-    }
+    setGenerandoVer(true); setErrorServidor(null);
+    try { mostrarEnVisor(await fetchPDF()); }
+    catch (err: unknown) { setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF"); }
+    finally { setGenerandoVer(false); }
   };
 
-  // Firmar → genera PDF y abre el firmador modal
   const handleFirmar = async () => {
-    setGenerandoPDF(true);
-    setErrorServidor(null);
-    try {
-      const b64 = await fetchPDF();
-      setPdfGenerado(b64);
-      setMostrarFirmador(true);
-    } catch (err: unknown) {
-      setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF");
-    } finally {
-      setGenerandoPDF(false);
-    }
+    setGenerandoPDF(true); setErrorServidor(null);
+    try { const b64 = await fetchPDF(); setPdfGenerado(b64); setMostrarFirmador(true); }
+    catch (err: unknown) { setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF"); }
+    finally { setGenerandoPDF(false); }
   };
 
-  // Callback cuando el usuario termina de firmar
   const handleFirmado = useCallback((b64: string) => {
-    setPdfFirmado(b64);
-    setMostrarFirmador(false);
-    // Actualizar el visor con el PDF ya firmado
-    mostrarEnVisor(b64);
+    setPdfFirmado(b64); setMostrarFirmador(false); mostrarEnVisor(b64);
   }, [mostrarEnVisor]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
     if (!file) return;
     if (file.type !== "application/pdf") { setErrors(p => ({ ...p, documento: "Solo PDF." })); return; }
-    if (file.size > 20 * 1024 * 1024)    { setErrors(p => ({ ...p, documento: "Máx. 20 MB." })); return; }
+    if (file.size > 20 * 1024 * 1024)   { setErrors(p => ({ ...p, documento: "Máx. 20 MB." })); return; }
     setDocumento(file); setNombreArchivo(file.name);
     setErrors(p => ({ ...p, documento: "" }));
   };
@@ -287,12 +267,8 @@ export default function RegistrarTemaPage() {
   return (
     <>
       {mostrarFirmador && pdfGenerado && (
-        <FirmadorPDF
-          pdfBase64={pdfGenerado}
-          soloVer={false}
-          onFirmado={handleFirmado}
-          onCerrar={() => setMostrarFirmador(false)}
-        />
+        <FirmadorPDF pdfBase64={pdfGenerado} soloVer={false}
+          onFirmado={handleFirmado} onCerrar={() => setMostrarFirmador(false)} />
       )}
 
       <div className="max-w-3xl mx-auto space-y-6">
@@ -419,16 +395,23 @@ export default function RegistrarTemaPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Grupo de Investigación — dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Grupo de Investigación <span className="text-red-500">*</span>
                 </label>
-                <input type="text" value={grupoInv}
+                <select
+                  value={grupoInv}
                   onChange={e => { setGrupoInv(e.target.value); setErrors(p => ({ ...p, grupo_inv: "" })); }}
-                  placeholder="Ej. Gisel, HDSP, CPS"
-                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.grupo_inv ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
+                  className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white appearance-none ${errors.grupo_inv ? "border-red-400 bg-red-50" : "border-gray-200"}`}>
+                  <option value="">Seleccionar grupo...</option>
+                  {grupos.map(g => (
+                    <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                  ))}
+                </select>
                 {errors.grupo_inv && <p className="text-red-500 text-xs mt-1">{errors.grupo_inv}</p>}
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Área de Formación <span className="text-red-500">*</span>
@@ -482,32 +465,23 @@ export default function RegistrarTemaPage() {
               <div className="flex gap-2">
                 <button onClick={handlePrevisualizar} disabled={generandoVer || generandoPDF}
                   className={`flex-1 flex items-center justify-center gap-2 bg-white border border-blue-300 text-blue-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors ${generandoVer ? "opacity-60 cursor-not-allowed" : ""}`}>
-                  {generandoVer
-                    ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generando...</>
-                    : <><span>👁️</span> Previsualizar</>}
+                  {generandoVer ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generando...</> : <><span>👁️</span> Previsualizar</>}
                 </button>
                 <button onClick={handleFirmar} disabled={generandoPDF || generandoVer}
                   className={`flex-1 flex items-center justify-center gap-2 bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-800 transition-colors ${generandoPDF ? "opacity-60 cursor-not-allowed" : ""}`}>
-                  {generandoPDF
-                    ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generando...</>
-                    : <><span>✍️</span> {pdfFirmado ? "Editar firma" : "Firmar"}</>}
+                  {generandoPDF ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Generando...</> : <><span>✍️</span> {pdfFirmado ? "Editar firma" : "Firmar"}</>}
                 </button>
               </div>
               {pdfFirmado && <p className="text-xs text-green-700 text-center">✅ Formulario firmado — se adjuntará al enviar</p>}
             </div>
 
-            {/* ── Visor embebido ── */}
             {visorUrl && (
               <div ref={visorRef} className="border border-gray-200 rounded-xl overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-200">
                   <span className="text-xs font-semibold text-gray-600">
                     {pdfFirmado ? "✍️ Formulario firmado" : "📄 Vista previa del formulario"}
                   </span>
-                  <button
-                    onClick={() => {
-                      setVisorUrl(null);
-                      if (prevVisorUrl.current) { URL.revokeObjectURL(prevVisorUrl.current); prevVisorUrl.current = null; }
-                    }}
+                  <button onClick={() => { setVisorUrl(null); if (prevVisorUrl.current) { URL.revokeObjectURL(prevVisorUrl.current); prevVisorUrl.current = null; } }}
                     className="text-xs text-gray-400 hover:text-red-500 font-bold">✕ Cerrar</button>
                 </div>
                 <iframe src={visorUrl} className="w-full" style={{ height: "700px" }} title="Vista previa" />

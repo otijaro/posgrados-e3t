@@ -45,7 +45,7 @@ const ESTADO_LABEL: Record<string, string> = {
   graduado:       "Graduado",
 };
 
-function authH() {
+function authH(): Record<string, string> {
   const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   return t ? { Authorization: `Bearer ${t}` } : {};
 }

@@ -9,13 +9,18 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.database import SessionLocal
 from app.models import Persona, CatalogoRol, VinculacionActiva
 from app.services.auth import hash_password
+from sqlalchemy import or_
 
 db = SessionLocal()
 
 try:
     # 1. Buscar o crear el coordinador
     coordinador = db.query(Persona).filter(
-        Persona.nombre_completo.ilike("%tijaro%")
+        or_(
+            Persona.email_institucional == "ojtijaro@uis.edu.co",
+            Persona.nombre_completo.ilike("%tijaro%"),
+            Persona.nombre_completo.ilike("%tíjaro%"),
+        )
     ).first()
 
     if not coordinador:

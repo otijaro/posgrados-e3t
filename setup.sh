@@ -33,8 +33,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
       brew install --cask libreoffice
       echo "   ✅ LibreOffice instalado"
     else
-      echo "   ⚠️  Homebrew no encontrado. Instale LibreOffice manualmente:"
-      echo "   https://www.libreoffice.org/download/download/"
+      echo "   ⚠️  Instale LibreOffice manualmente: https://www.libreoffice.org"
     fi
   else
     echo "   ✅ LibreOffice ya instalado"
@@ -47,15 +46,36 @@ echo "🐍 Configurando backend..."
 cd "$BACKEND"
 
 if [ ! -d "venv" ]; then
-  echo "   Creando entorno virtual..."
-  python3 -m venv venv
+  echo "   Buscando una versión de Python compatible (3.11–3.13)..."
+  PYBIN=""
+  for cand in python3.13 python3.12 python3.11; do
+    if command -v "$cand" &>/dev/null; then
+      PYBIN="$cand"
+      break
+    fi
+  done
+
+  if [ -z "$PYBIN" ]; then
+    # Fallback: usar python3 del sistema, pero avisar si es demasiado nuevo
+    PYVER="$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
+    if [[ "$(printf '%s\n' "3.14" "$PYVER" | sort -V | head -n1)" == "3.14" ]]; then
+      echo "   ⚠️  No se encontró Python 3.11–3.13 y el python3 por defecto es $PYVER,"
+      echo "       versión demasiado nueva para pydantic-core (requiere <= 3.13)."
+      echo "       Instálalo con: brew install python@3.12"
+      exit 1
+    fi
+    PYBIN="python3"
+  fi
+
+  echo "   Creando entorno virtual con $PYBIN ($($PYBIN --version))..."
+  "$PYBIN" -m venv venv
 fi
 
 source venv/bin/activate
 
 echo "   Instalando dependencias..."
 pip install -q -r requirements.txt
-pip install -q pydantic-settings "psycopg[binary]"
+pip install -q pydantic-settings "psycopg[binary]>=3.2.10"
 
 # ── 4. Crear tablas ──────────────────────────────────────────
 echo ""
@@ -101,7 +121,10 @@ echo "   🔑 Migraciones..."
 python3 migracion_firmas.py 2>&1 | tail -3
 python3 migracion_dir_grupo.py 2>&1 | tail -3
 
-echo "   📁 Cargando documentos iniciales..."
+echo "   🔬 Cargando grupos de investigación..."
+ python3 seed_grupos.py 2>&1 | tail -3
+
+   echo "   📁 Cargando documentos iniciales..."
 python3 seed_documentos.py 2>&1 | tail -3
 
 # ── 6. Frontend ──────────────────────────────────────────────
