@@ -23,3 +23,14 @@ class UserInfoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Correo institucional al que se envía el enlace de restablecimiento."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Token recibido por correo + nueva contraseña."""
+    token: str
+    new_password: str

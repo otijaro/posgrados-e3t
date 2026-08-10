@@ -5,7 +5,7 @@ import Link from "next/link";
 import { getMiPerfil, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;

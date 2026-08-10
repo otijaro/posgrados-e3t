@@ -84,6 +84,11 @@ export default function LoginPage() {
                            focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-transparent
                            placeholder:text-gray-400"
               />
+              <div className="text-right mt-1.5">
+                <Link href="/olvide-contrasena" className="text-xs text-green-700 hover:text-green-800 hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
             </div>
 
             {error && (

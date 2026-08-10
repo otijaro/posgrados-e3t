@@ -8,7 +8,7 @@ import { getMe, UserInfo } from "@/lib/auth";
 
 const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: false });
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const LINK_LINEA = "https://www.uis.edu.co/webUIS/es/academia/facultades/fisicoMecanicas/escuelas/e3t/nuestraEscuela/trabajoGrado.html";
 
 function authHeaders(): Record<string, string> {

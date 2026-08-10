@@ -3,7 +3,7 @@
 import { useState } from "react";
 import PublicNav from "@/components/layout/PublicNav";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const grupos = [
   { nombre: "GISEL",    descripcion: "Grupo de Investigación en Sistemas Eléctricos de Potencia",                          url_grupo: "https://uis.edu.co/ffm-gruinv-gisel-es/",       url_proyectos: "https://drive.google.com/file/d/1Pt24JUF9YEqpKeqsjWjj70Nwh16HPUM4/view?usp=sharing", icono: "⚡", color: "border-yellow-500", bg: "bg-yellow-50" },

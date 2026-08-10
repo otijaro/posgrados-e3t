@@ -25,6 +25,16 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
     ]
+
+    # Correo (recuperación de contraseña)
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_NAME: str = "Posgrados E3T"
+
+    # URL pública del frontend, usada para construir el enlace del correo
+    FRONTEND_URL: str = "http://localhost:3000"
     
     class Config:
         env_file = ".env"

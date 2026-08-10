@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { getMe, logout, UserInfo, rolPrincipal } from "@/lib/auth";
 import { getMisEstudiantes } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const menus: Record<string, { label: string; href: string; icon: string; exacto?: boolean }[]> = {
   estudiante: [
