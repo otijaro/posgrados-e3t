@@ -166,12 +166,33 @@ def get_or_create_persona(nombre, correo, celular):
     return persona
 
 def buscar_director(nombre_director):
-    partes = [p for p in nombre_director.strip().split() if len(p) > 3]
-    for parte in partes:
-        p = db.query(Persona).filter(Persona.nombre_completo.ilike(f"%{parte}%")).first()
-        if p:
-            return p
-    # Crear sin contraseña
+    nombre_director = nombre_director.strip()
+
+    # 1) Match exacto (insensible a mayúsculas) primero — el caso ideal.
+    p = db.query(Persona).filter(Persona.nombre_completo.ilike(nombre_director)).first()
+    if p:
+        return p
+
+    # 2) Buscar por combinaciones de 2+ palabras del nombre (más específico
+    #    que una sola palabra, evita falsos positivos con nombres comunes
+    #    como "Juan" o "Carlos" que aparecen en muchas personas distintas).
+    partes = [x for x in nombre_director.split() if len(x) > 2]
+    for i in range(len(partes) - 1):
+        combo = f"%{partes[i]}%{partes[i+1]}%"
+        candidatos = db.query(Persona).filter(Persona.nombre_completo.ilike(combo)).all()
+        if len(candidatos) == 1:
+            return candidatos[0]
+
+    # 3) Última palabra sola (normalmente el apellido, más distintivo que
+    #    el primer nombre) — solo si el match es único.
+    if partes:
+        candidatos = db.query(Persona).filter(
+            Persona.nombre_completo.ilike(f"%{partes[-1]}%")
+        ).all()
+        if len(candidatos) == 1:
+            return candidatos[0]
+
+    # 4) Sin match confiable -> crear persona nueva en vez de adivinar mal.
     email_gen = re.sub(r'[^a-z.]', '', nombre_director.lower().replace(" ", "."))[:30] + "@uis.edu.co"
     p = Persona(nombre_completo=nombre_director, email_institucional=email_gen)
     db.add(p)
