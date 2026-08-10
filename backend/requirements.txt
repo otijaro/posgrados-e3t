@@ -19,6 +19,7 @@ python-multipart==0.0.12
 httpx==0.28.1
 python-dotenv==1.0.1
 docx2pdf==0.1.8
+openpyxl==3.1.5
 
 # Testing
 pytest==8.3.4

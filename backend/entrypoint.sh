@@ -34,6 +34,7 @@ python3 migracion_firmas.py        2>&1 | tail -3
 python3 migracion_dir_grupo.py     2>&1 | tail -3
 python3 seed_documentos.py         2>&1 | tail -3
 python3 seed_grupos.py             2>&1 | tail -3
+python3 seed_grupos_estudiantes.py 2>&1 | tail -3
 python3 seed_roles_completos.py    2>&1 | tail -3
 
 echo "🚀 Iniciando servidor..."
