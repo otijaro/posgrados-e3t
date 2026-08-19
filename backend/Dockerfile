@@ -1,5 +1,9 @@
 FROM python:3.12-slim
 
+# Sin esto, los print() de Python quedan en buffer y no aparecen en
+# tiempo real en `docker logs` — imprescindible para poder diagnosticar.
+ENV PYTHONUNBUFFERED=1
+
 RUN apt-get update && apt-get install -y \
     libreoffice \
     libreoffice-writer \
