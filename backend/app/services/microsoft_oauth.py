@@ -30,10 +30,17 @@ def exchange_code(code: str, redirect_uri: str) -> str | None:
         "scope": SCOPE,
     }
     try:
-        resp = httpx.post(f"{AUTHORITY}/oauth2/v2.0/token", data=data, timeout=10)
-        resp.raise_for_status()
+        url = f"{AUTHORITY}/oauth2/v2.0/token"
+        print(f"🔎 Microsoft OAuth: POST a {url}  (tenant_id configurado: '{settings.MICROSOFT_TENANT_ID}')")
+        resp = httpx.post(url, data=data, timeout=10)
+        if resp.status_code != 200:
+            # Log detallado para diagnosticar (Azure explica el motivo exacto en el body)
+            print(f"⚠️  Microsoft OAuth token exchange falló [{resp.status_code}]: {resp.text}")
+            print(f"    redirect_uri enviado: {redirect_uri}")
+            return None
         return resp.json().get("access_token")
-    except httpx.HTTPError:
+    except httpx.HTTPError as e:
+        print(f"⚠️  Microsoft OAuth token exchange excepción: {e}")
         return None
 
 
