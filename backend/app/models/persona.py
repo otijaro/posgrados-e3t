@@ -18,6 +18,7 @@ class Persona(Base):
     documento_identidad = Column(String(50), unique=True)
     telefono = Column(String(50))
     linkedin_id = Column(String(255))
+    foto_url = Column(String(500), nullable=True)
     
     # Contraseña hasheada
     hashed_password = Column(String(255))

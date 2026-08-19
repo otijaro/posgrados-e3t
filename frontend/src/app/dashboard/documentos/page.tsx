@@ -35,7 +35,7 @@ export default function DocumentosPage() {
   const [busqueda, setBusqueda]     = useState("");
 
   useEffect(() => {
-    fetch(`${API_URL}/api/documentos/`, { headers: authHeaders() })
+    fetch(`${API_URL}/api/documentos`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setDocumentos(Array.isArray(data) ? data : []))
       .catch(() => setError("No se pudieron cargar los documentos"))

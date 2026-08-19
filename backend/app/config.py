@@ -35,6 +35,11 @@ class Settings(BaseSettings):
 
     # URL pública del frontend, usada para construir el enlace del correo
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # OAuth con Microsoft (login institucional @uis.edu.co)
+    MICROSOFT_CLIENT_ID: str = ""
+    MICROSOFT_CLIENT_SECRET: str = ""
+    MICROSOFT_TENANT_ID: str = ""
     
     class Config:
         env_file = ".env"

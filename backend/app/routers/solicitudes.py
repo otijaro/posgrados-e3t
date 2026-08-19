@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models import (
     Solicitud, FlujoAprobacion,
     TipoSolicitud, CategoriasSolicitud, EstadoSolicitud, NivelAprobacion,
-    ProgramaPosgrado, Estudiante, Persona
+    ProgramaPosgrado, Estudiante, Persona, CreditoCondonable
 )
 from app.schemas import SolicitudListResponse
 from app.services.auth import get_current_user
@@ -586,6 +586,70 @@ async def cambio_director(
     _crear_flujo_director(db, solicitud.id)
     db.commit(); db.refresh(solicitud)
     return {"mensaje": "Solicitud enviada exitosamente", "numero_radicado": solicitud.numero_radicado, "id": solicitud.id, "estado": solicitud.estado.value}
+
+# ── POST crédito condonable ───────────────────────────────────────────────
+
+@router.post("/credito-condonable", status_code=201)
+async def credito_condonable(
+    periodo_completo: str = Form(...),   # ej. "2026-2"
+    modalidad: str = Form(...),          # "Docencia Directa" | "Asistente de Investigación" | "Otro"
+    materia_asignada: Optional[str] = Form(None),
+    horas_semanales: Optional[int] = Form(None),
+    justificacion: str = Form(...),
+    carta_director: UploadFile = File(...),
+    certificado_notas: Optional[UploadFile] = File(None),
+    paz_salvo: Optional[UploadFile] = File(None),
+    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+):
+    persona, estudiante = _get_estudiante_autenticado(token, db)
+
+    try:
+        anio_str, periodo_str = periodo_completo.split("-")
+        anio, periodo = int(anio_str), int(periodo_str)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="Periodo inválido, formato esperado AAAA-P (ej. 2026-2)")
+
+    url_carta = _guardar_pdf(carta_director)
+    url_notas = _guardar_pdf(certificado_notas) if certificado_notas and certificado_notas.filename else None
+    url_paz_salvo = _guardar_pdf(paz_salvo) if paz_salvo and paz_salvo.filename else None
+
+    solicitud = Solicitud(
+        numero_radicado=_generar_radicado(db),
+        tipo_solicitud=TipoSolicitud.CREDITO_CONDONABLE,
+        categoria=CategoriasSolicitud.FINANCIERA,
+        id_solicitante=persona.id, id_estudiante=estudiante.id,
+        id_proyecto=estudiante.proyecto.id if estudiante.proyecto else None,
+        id_programa=estudiante.id_programa,
+        asunto=f"Crédito condonable {periodo_completo} — {persona.nombre_completo}",
+        descripcion=(
+            f"Estudiante: {persona.nombre_completo} (Código: {estudiante.codigo_estudiante})\n"
+            f"Periodo: {periodo_completo}\nModalidad: {modalidad}\n"
+            f"{'Materia asignada: ' + materia_asignada if materia_asignada else ''}"
+            f"{' (' + str(horas_semanales) + ' h/semana)' if horas_semanales else ''}\n\n"
+            f"Justificación:\n{justificacion}"
+        ),
+        documentos_adjuntos=url_carta,
+        nivel_aprobacion_requerido=NivelAprobacion.DIRECTOR,
+        estado=EstadoSolicitud.ENVIADA,
+        fecha_envio=datetime.utcnow(),
+    )
+    db.add(solicitud); db.flush()
+
+    db.add(CreditoCondonable(
+        id_solicitud=solicitud.id,
+        id_estudiante=estudiante.id,
+        anio=anio, periodo=periodo, periodo_completo=periodo_completo,
+        modalidad=modalidad,
+        materia_asignada=materia_asignada,
+        horas_semanales=horas_semanales,
+        url_carta_director=url_carta,
+        url_certificado_notas=url_notas,
+        url_paz_salvo=url_paz_salvo,
+    ))
+
+    _crear_flujo_director(db, solicitud.id)
+    db.commit(); db.refresh(solicitud)
+    return {"mensaje": "Solicitud de crédito condonable enviada exitosamente", "numero_radicado": solicitud.numero_radicado, "id": solicitud.id, "estado": solicitud.estado.value}
 
 # ── POST cambio de título ─────────────────────────────────────────────────────
 

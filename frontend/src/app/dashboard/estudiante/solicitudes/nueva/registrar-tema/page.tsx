@@ -85,8 +85,6 @@ export default function RegistrarTemaPage() {
   const [areaFormacion, setAreaFormacion]       = useState("");
   const [objetivo, setObjetivo]                 = useState("");
   const [alcances, setAlcances]                 = useState("");
-  const [documento, setDocumento]               = useState<File | null>(null);
-  const [nombreArchivo, setNombreArchivo]       = useState<string | null>(null);
 
   const [errors, setErrors]               = useState<Record<string, string>>({});
   const [enviando, setEnviando]           = useState(false);
@@ -176,15 +174,6 @@ export default function RegistrarTemaPage() {
     setPdfFirmado(b64); setMostrarFirmador(false); mostrarEnVisor(b64);
   }, [mostrarEnVisor]);
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    if (!file) return;
-    if (file.type !== "application/pdf") { setErrors(p => ({ ...p, documento: "Solo PDF." })); return; }
-    if (file.size > 20 * 1024 * 1024)   { setErrors(p => ({ ...p, documento: "Máx. 20 MB." })); return; }
-    setDocumento(file); setNombreArchivo(file.name);
-    setErrors(p => ({ ...p, documento: "" }));
-  };
-
   const esCorreoValido = (c: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
 
   const validar = (): boolean => {
@@ -226,8 +215,6 @@ export default function RegistrarTemaPage() {
       if (pdfFirmado) {
         const bytes = Uint8Array.from(atob(pdfFirmado), c => c.charCodeAt(0));
         formData.append("documento", new Blob([bytes], { type: "application/pdf" }), "formulario_tema_firmado.pdf");
-      } else if (documento) {
-        formData.append("documento", documento);
       }
       const res = await fetch(`${API_URL}/api/solicitudes/registrar-tema`, {
         method: "POST", headers: authHeaders(), body: formData,
@@ -487,27 +474,6 @@ export default function RegistrarTemaPage() {
                 <iframe src={visorUrl} className="w-full" style={{ height: "700px" }} title="Vista previa" />
               </div>
             )}
-
-            <p className="text-xs text-gray-400 text-center">— o adjunta un documento propio —</p>
-            <div className={`border-2 border-dashed rounded-xl p-6 text-center transition-colors ${errors.documento ? "border-red-300 bg-red-50" : nombreArchivo ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-green-400 hover:bg-green-50"}`}>
-              {nombreArchivo ? (
-                <div className="space-y-2">
-                  <span className="text-3xl">📄</span>
-                  <p className="text-sm font-semibold text-green-700">{nombreArchivo}</p>
-                  <button onClick={() => { setNombreArchivo(null); setDocumento(null); }} className="text-xs text-red-500 hover:underline">Eliminar</button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-500">Arrastra aquí o</p>
-                  <label className="cursor-pointer inline-block bg-green-700 text-white text-sm px-4 py-2 rounded-lg hover:bg-green-800 font-semibold">
-                    Seleccionar PDF
-                    <input type="file" accept=".pdf" onChange={handleFile} className="hidden" />
-                  </label>
-                  <p className="text-xs text-gray-400">Solo PDF · Máx. 20 MB</p>
-                </div>
-              )}
-            </div>
-            {errors.documento && <p className="text-red-500 text-xs">{errors.documento}</p>}
           </div>
 
           {/* Botones */}

@@ -51,12 +51,14 @@ export default function ProyectoPage() {
 
   const proyecto = perfil?.proyecto;
   const pasoActual = proyecto ? (ESTADO_PASO[proyecto.estado] ?? 3) : 0;
+  const esDoctorado = perfil?.programa?.includes("Doctorado") ?? false;
+  const tituloPagina = esDoctorado ? "Tesis de Investigación" : "Proyecto de Investigación";
 
   return (
     <div className="space-y-8">
       {/* Encabezado */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Mi Proyecto de Grado</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{tituloPagina}</h1>
         <p className="text-gray-500 mt-1">{perfil?.programa ?? "—"}</p>
       </div>
 

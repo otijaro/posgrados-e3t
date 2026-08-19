@@ -5,6 +5,7 @@ export interface UserInfo {
   nombre_completo: string;
   email_institucional: string;
   roles: string[];
+  foto_url?: string | null;
 }
 
 export async function login(email: string, password: string): Promise<void> {

@@ -54,5 +54,12 @@ with engine.connect() as conn:
     except Exception as e:
         print(f"⚠️  {e}")
 
+    # Agregar columna foto_url a persona si no existe (foto de perfil)
+    try:
+        conn.execute(text("ALTER TABLE persona ADD COLUMN IF NOT EXISTS foto_url VARCHAR(500);"))
+        print("✅ foto_url en persona")
+    except Exception as e:
+        print(f"⚠️  {e}")
+
     conn.commit()
     print("\n✅ Migración completada")

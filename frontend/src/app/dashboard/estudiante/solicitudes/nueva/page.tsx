@@ -43,7 +43,7 @@ const tiposSolicitud = [
     color: "border-purple-400 hover:bg-purple-50",
     badge: "bg-purple-100 text-purple-700",
     categoria: "Académica",
-    disponible: false,
+    disponible: true,
   },
   {
     id: "credito_condonable",
@@ -53,7 +53,7 @@ const tiposSolicitud = [
     color: "border-yellow-400 hover:bg-yellow-50",
     badge: "bg-yellow-100 text-yellow-700",
     categoria: "Financiera",
-    disponible: false,
+    disponible: true,
   },
   {
     id: "prorroga",
@@ -118,9 +118,11 @@ const tiposSolicitud = [
 ];
 
 const rutas: Record<string, string> = {
-  evaluacion:      "/dashboard/estudiante/solicitudes/nueva/evaluacion",
-  registrar_tema:  "/dashboard/estudiante/solicitudes/nueva/registrar-tema",
-  cambio_titulo:   "/dashboard/estudiante/solicitudes/nueva/cambio-titulo",
+  evaluacion:          "/dashboard/estudiante/solicitudes/nueva/evaluacion",
+  registrar_tema:      "/dashboard/estudiante/solicitudes/nueva/registrar-tema",
+  cambio_titulo:       "/dashboard/estudiante/solicitudes/nueva/cambio-titulo",
+  cambio_director:     "/dashboard/estudiante/solicitudes/nueva/cambio-director",
+  credito_condonable:  "/dashboard/estudiante/solicitudes/nueva/credito-condonable",
 };
 
 const categorias = ["Todas", ...Array.from(new Set(tiposSolicitud.map((t) => t.categoria)))];
