@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function authH(): Record<string, string> {
   const t = typeof window !== "undefined" ? localStorage.getItem("token") : null;

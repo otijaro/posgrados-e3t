@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -54,7 +54,7 @@ export default function GestionDocumentosPage() {
 
   const cargarDocumentos = () => {
     setCargando(true);
-    fetch(`${API_URL}/api/documentos/`, { headers: authHeaders() })
+    fetch(`${API_URL}/api/documentos`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setDocumentos(Array.isArray(data) ? data : []))
       .catch(() => setError("Error cargando documentos"))
@@ -83,7 +83,7 @@ export default function GestionDocumentosPage() {
       form.append("categoria",   categoria === "Otra" ? categoriaCustom.trim() || "General" : categoria);
       form.append("archivo",     archivo);
 
-      const res = await fetch(`${API_URL}/api/documentos/`, {
+      const res = await fetch(`${API_URL}/api/documentos`, {
         method: "POST",
         headers: authHeaders(),
         body: form,

@@ -59,7 +59,7 @@ def crear_tabla_documentos(db: Session):
 
 # ── GET listar documentos ─────────────────────────────────────────────────────
 
-@router.get("/")
+@router.get("")
 def listar_documentos(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
@@ -94,7 +94,7 @@ def listar_documentos(
 
 # ── POST subir documento ──────────────────────────────────────────────────────
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def subir_documento(
     nombre:      str = Form(...),
     descripcion: str = Form(""),

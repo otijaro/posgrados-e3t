@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 // ─── Tipos ────────────────────────────────────────────────────
 
@@ -33,7 +33,9 @@ export interface ProyectoInfo {
   titulo: string;
   estado: string;
   director: string;
+  director_correo: string | null;
   codirector: string | null;
+  codirector_correo: string | null;
   ultimo_reporte: string | null;
 }
 
@@ -111,7 +113,7 @@ function authHeaders(): HeadersInit {
 // ─── Programas ────────────────────────────────────────────────
 
 export async function getProgramas(): Promise<Programa[]> {
-  const res = await fetch(`${API_URL}/api/programas/`);
+  const res = await fetch(`${API_URL}/api/programas`);
   if (!res.ok) throw new Error("Error al obtener programas");
   return res.json();
 }
@@ -123,6 +125,61 @@ export async function getMiPerfil(): Promise<EstudianteInfo> {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error("Error al obtener el perfil del estudiante");
+  return res.json();
+}
+
+export interface ActualizarPerfilPayload {
+  titulo?: string;
+  director_nombre?: string;
+  director_correo?: string;
+  codirector_nombre?: string;
+  codirector_correo?: string;
+  promedio_acumulado?: string;
+}
+
+export async function actualizarPerfil(
+  data: ActualizarPerfilPayload
+): Promise<{ mensaje: string }> {
+  const res = await fetch(`${API_URL}/api/estudiante/perfil`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || "Error al actualizar el perfil");
+  }
+  return res.json();
+}
+
+export async function subirFotoPerfil(
+  foto: File
+): Promise<{ mensaje: string; foto_url: string }> {
+  const formData = new FormData();
+  formData.append("foto", foto);
+  const res = await fetch(`${API_URL}/api/estudiante/foto-perfil`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: formData,
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || "Error al subir la foto");
+  }
+  return res.json();
+}
+
+export interface DocenteOpcion {
+  id: number;
+  nombre_completo: string;
+  email_institucional: string;
+}
+
+export async function getDocentesDisponibles(): Promise<DocenteOpcion[]> {
+  const res = await fetch(`${API_URL}/api/estudiante/docentes-disponibles`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Error al obtener la lista de docentes");
   return res.json();
 }
 
@@ -167,7 +224,7 @@ export async function getSolicitudes(
   const params = new URLSearchParams();
   if (id_programa) params.append("id_programa", String(id_programa));
   if (estado) params.append("estado", estado);
-  const res = await fetch(`${API_URL}/api/solicitudes/?${params.toString()}`);
+  const res = await fetch(`${API_URL}/api/solicitudes?${params.toString()}`);
   if (!res.ok) throw new Error("Error al obtener solicitudes");
   return res.json();
 }

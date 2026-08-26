@@ -19,9 +19,7 @@ services:
     restart: unless-stopped
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: juliamdiaz09/posgrados-backend:latest
     container_name: posgrados_backend
     environment:
       DATABASE_URL: postgresql://posgrados_user:posgrados_pass@db:5432/posgrados_db
@@ -30,14 +28,6 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: "480"
       ALLOWED_ORIGINS: '["http://localhost:3000","http://localhost:3001"]'
       ANTHROPIC_API_KEY: ""
-      SMTP_HOST: smtp.gmail.com
-      SMTP_PORT: "587"
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      FRONTEND_URL: http://localhost:3000
-      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
-      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
-      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
     ports:
       - "8000:8000"
     volumes:
@@ -49,15 +39,12 @@ services:
     command: ["sh", "/app/entrypoint.sh"]
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
-        NEXT_PUBLIC_MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+    image: juliamdiaz09/posgrados-frontend:latest
     container_name: posgrados_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       - backend
     restart: unless-stopped

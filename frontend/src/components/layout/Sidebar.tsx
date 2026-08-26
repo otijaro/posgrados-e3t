@@ -5,19 +5,18 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getMe, logout, UserInfo, rolPrincipal } from "@/lib/auth";
-import { getMisEstudiantes } from "@/lib/api";
+import { getMisEstudiantes, getMiPerfil } from "@/lib/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const menus: Record<string, { label: string; href: string; icon: string; exacto?: boolean }[]> = {
   estudiante: [
-    { label: "Inicio",            href: "/dashboard/estudiante",             icon: "🏠", exacto: true },
-    { label: "Mi Proyecto",       href: "/dashboard/estudiante/proyecto",    icon: "📄" },
-    { label: "Solicitudes",       href: "/dashboard/estudiante/solicitudes", icon: "📋" },
-    { label: "Documentos",        href: "/dashboard/documentos",             icon: "📁" },
-    { label: "Reglamento",        href: "/dashboard/reglamento",             icon: "📜" },
-    { label: "Calendarios",       href: "/dashboard/calendarios",            icon: "📅" },
-    { label: "Planes de Estudio", href: "/dashboard/planes-estudio",         icon: "📚" },
+    { label: "Inicio",              href: "/dashboard/estudiante",             icon: "🏠", exacto: true },
+    { label: "Mi Perfil",           href: "/dashboard/perfil",                 icon: "👤" },
+    { label: "Mi Proyecto",         href: "/dashboard/estudiante/proyecto",    icon: "📄" },
+    { label: "Solicitudes",         href: "/dashboard/estudiante/solicitudes", icon: "📋" },
+    { label: "Documentos",          href: "/dashboard/documentos",             icon: "📁" },
+    { label: "Mi Plan de Estudio",  href: "/dashboard/planes-estudio",         icon: "📚" },
   ],
   director: [
     { label: "Inicio",          href: "/dashboard/director",                  icon: "🏠", exacto: true },
@@ -25,8 +24,6 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Por firmar",      href: "/dashboard/director/solicitudes",      icon: "✍️" },
     { label: "Aval grupo inv.", href: "/dashboard/director/firmas-grupo",     icon: "🔬" },
     { label: "Documentos",      href: "/dashboard/documentos",                icon: "📁" },
-    { label: "Reglamento",      href: "/dashboard/reglamento",                icon: "📜" },
-    { label: "Calendarios",     href: "/dashboard/calendarios",               icon: "📅" },
   ],
   coordinador: [
     { label: "Inicio",      href: "/dashboard/coordinador",                  icon: "🏠", exacto: true },
@@ -35,8 +32,6 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Estudiantes", href: "/dashboard/coordinador/estudiantes",      icon: "🎓" },
     { label: "Docentes",    href: "/dashboard/coordinador/docentes",         icon: "👨‍🏫" },
     { label: "Documentos",  href: "/dashboard/coordinador/documentos",       icon: "📁" },
-    { label: "Reglamento",  href: "/dashboard/reglamento",                   icon: "📜" },
-    { label: "Calendarios", href: "/dashboard/calendarios",                  icon: "📅" },
   ],
   secretaria: [
     { label: "Inicio",      href: "/dashboard/secretaria",                   icon: "🏠", exacto: true },
@@ -45,14 +40,10 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Estudiantes", href: "/dashboard/secretaria/estudiantes",       icon: "🎓" },
     { label: "Docentes",    href: "/dashboard/secretaria/docentes",          icon: "👨‍🏫" },
     { label: "Documentos",  href: "/dashboard/documentos",                   icon: "📁" },
-    { label: "Reglamento",  href: "/dashboard/reglamento",                   icon: "📜" },
-    { label: "Calendarios", href: "/dashboard/calendarios",                  icon: "📅" },
   ],
   comite: [
     { label: "Inicio",      href: "/dashboard/comite",      icon: "🏠", exacto: true },
     { label: "Documentos",  href: "/dashboard/documentos",  icon: "📁" },
-    { label: "Reglamento",  href: "/dashboard/reglamento",  icon: "📜" },
-    { label: "Calendarios", href: "/dashboard/calendarios", icon: "📅" },
   ],
 };
 
@@ -81,6 +72,8 @@ export default function Sidebar() {
   const [pendientes, setPendientes]       = useState(0);
   const [firmasPendientes, setFirmasPendientes]       = useState(0);
   const [avalGrupoPendientes, setAvalGrupoPendientes] = useState(0);
+  const [esDoctorado, setEsDoctorado]     = useState(false);
+  const [abierto, setAbierto]             = useState(false);
 
   useEffect(() => {
     getMe().then((u) => {
@@ -92,6 +85,12 @@ export default function Sidebar() {
       const token = localStorage.getItem("token");
       if (!token) return;
       const h = { Authorization: `Bearer ${token}` };
+
+      if (r === "estudiante") {
+        getMiPerfil()
+          .then((p) => setEsDoctorado(p.programa?.includes("Doctorado") ?? false))
+          .catch(() => {});
+      }
 
       if (r === "director") {
         getMisEstudiantes()
@@ -121,76 +120,107 @@ export default function Sidebar() {
     else { const r = localStorage.getItem("rol_activo"); if (r) setRol(r); }
   }, [pathname]);
 
+  // Cierra el menú automáticamente al navegar a una nueva página
+  useEffect(() => { setAbierto(false); }, [pathname]);
+
   function handleLogout() { logout(); router.push("/"); }
 
   const menuItems = menus[rol] ?? menus["estudiante"];
 
-  return (
-    <aside className="w-64 bg-green-800 text-white flex flex-col min-h-screen">
-      <div className="p-5 border-b border-green-700 flex items-center gap-3">
-        <div className="bg-white rounded-lg p-1.5">
-          <Image src="/E3T.png" alt="E3T" width={32} height={28} className="object-contain" />
-        </div>
-        <div>
-          <p className="text-sm font-bold leading-tight">Posgrados E3T</p>
-          <p className="text-green-300 text-xs">UIS</p>
-        </div>
-      </div>
+  function etiqueta(item: { label: string; href: string }): string {
+    if (rol === "estudiante" && item.href === "/dashboard/estudiante/proyecto") {
+      return esDoctorado ? "Tesis" : "Proyecto";
+    }
+    return item.label;
+  }
 
-      <div className="p-4 border-b border-green-700 bg-green-900">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center font-bold text-sm">
-            {user ? iniciales(user.nombre_completo) : "…"}
+  return (
+    <>
+      {/* Botón para abrir/cerrar — siempre visible, incluso con el menú oculto */}
+      <button
+        onClick={() => setAbierto((v) => !v)}
+        aria-label={abierto ? "Cerrar menú" : "Abrir menú"}
+        className="fixed top-4 left-4 z-50 w-10 h-10 flex items-center justify-center rounded-lg bg-green-800 text-white shadow-md hover:bg-green-700 transition-colors"
+      >
+        {abierto ? "✕" : "☰"}
+      </button>
+
+      {/* Fondo oscuro al abrir, para cerrar al hacer clic afuera */}
+      {abierto && (
+        <div
+          onClick={() => setAbierto(false)}
+          className="fixed inset-0 bg-black/30 z-30"
+        />
+      )}
+
+      <aside className={`fixed inset-y-0 left-0 z-40 w-64 bg-green-800 text-white flex flex-col transition-transform duration-200 ${
+        abierto ? "translate-x-0" : "-translate-x-full"
+      }`}>
+        <div className="p-5 border-b border-green-700 flex items-center gap-3 pl-16">
+          <div className="bg-white rounded-lg p-1.5">
+            <Image src="/E3T.png" alt="E3T" width={32} height={28} className="object-contain" />
           </div>
           <div>
-            <p className="text-sm font-semibold">{user?.nombre_completo ?? "Cargando..."}</p>
-            <p className="text-xs text-green-300">{rolLabel[rol]} · {user?.email_institucional ?? ""}</p>
+            <p className="text-sm font-bold leading-tight">Posgrados E3T</p>
+            <p className="text-green-300 text-xs">UIS</p>
           </div>
         </div>
-      </div>
 
-      <nav className="flex-1 p-4 space-y-1 mt-2">
-        {menuItems.map((item) => {
-          const activo      = isActive(pathname, item.href, item.exacto);
-          const esBadge     = (rol === "director" && item.label === "Notificaciones") ||
-                              ((rol === "coordinador" || rol === "secretaria") && item.label === "Solicitudes");
-          const esFirmas    = item.label === "Por firmar";
-          const esAvalGrupo = item.label === "Aval grupo inv.";
+        <div className="p-4 border-b border-green-700 bg-green-900">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center font-bold text-sm">
+              {user ? iniciales(user.nombre_completo) : "…"}
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{user?.nombre_completo ?? "Cargando..."}</p>
+              <p className="text-xs text-green-300">{rolLabel[rol]} · {user?.email_institucional ?? ""}</p>
+            </div>
+          </div>
+        </div>
 
-          return (
-            <Link key={item.href} href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors ${
-                activo ? "bg-green-600 text-white font-semibold" : "text-green-200 hover:bg-green-700 hover:text-white"
-              }`}>
-              <span>{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
-              {esBadge && pendientes > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                  {pendientes > 99 ? "99+" : pendientes}
-                </span>
-              )}
-              {esFirmas && firmasPendientes > 0 && (
-                <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                  {firmasPendientes}
-                </span>
-              )}
-              {esAvalGrupo && avalGrupoPendientes > 0 && (
-                <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-                  {avalGrupoPendientes}
-                </span>
-              )}
-            </Link>
-          );
-        })}
-      </nav>
+        <nav className="flex-1 p-4 space-y-1 mt-2 overflow-y-auto">
+          {menuItems.map((item) => {
+            const activo      = isActive(pathname, item.href, item.exacto);
+            const esBadge     = (rol === "director" && item.label === "Notificaciones") ||
+                                ((rol === "coordinador" || rol === "secretaria") && item.label === "Solicitudes");
+            const esFirmas    = item.label === "Por firmar";
+            const esAvalGrupo = item.label === "Aval grupo inv.";
 
-      <div className="p-4 border-t border-green-700">
-        <button onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-green-200 hover:bg-red-700 hover:text-white transition-colors">
-          <span>🚪</span>
-          <span>Cerrar sesión</span>
-        </button>
-      </div>
-    </aside>
+            return (
+              <Link key={item.href} href={item.href}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm transition-colors ${
+                  activo ? "bg-green-600 text-white font-semibold" : "text-green-200 hover:bg-green-700 hover:text-white"
+                }`}>
+                <span>{item.icon}</span>
+                <span className="flex-1">{etiqueta(item)}</span>
+                {esBadge && pendientes > 0 && (
+                  <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                    {pendientes > 99 ? "99+" : pendientes}
+                  </span>
+                )}
+                {esFirmas && firmasPendientes > 0 && (
+                  <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                    {firmasPendientes}
+                  </span>
+                )}
+                {esAvalGrupo && avalGrupoPendientes > 0 && (
+                  <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                    {avalGrupoPendientes}
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-green-700">
+          <button onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm text-green-200 hover:bg-red-700 hover:text-white transition-colors">
+            <span>🚪</span>
+            <span>Cerrar sesión</span>
+          </button>
+        </div>
+      </aside>
+    </>
   );
 }

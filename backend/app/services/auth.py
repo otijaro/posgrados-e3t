@@ -55,6 +55,50 @@ def decode_access_token(token: str) -> Optional[dict]:
         return None
 
 
+# ── Restablecimiento de contraseña ────────────────────────────────────────────
+
+def create_password_reset_token(persona: Persona) -> str:
+    """
+    Crea un token de un solo propósito para restablecer contraseña, válido
+    por 1 hora. Incluye un hash corto de la contraseña actual para que el
+    token quede invalidado automáticamente en cuanto se use una vez
+    (porque al cambiar la contraseña, ese hash deja de coincidir).
+    """
+    huella = (persona.hashed_password or "")[-12:]
+    data = {
+        "sub": str(persona.id),
+        "purpose": "password_reset",
+        "pwd_fp": huella,
+    }
+    return create_access_token(data, expires_delta=timedelta(hours=1))
+
+
+def verify_password_reset_token(db: Session, token: str) -> Optional[Persona]:
+    """
+    Valida un token de restablecimiento. Devuelve la Persona si es válido
+    y no ha sido usado ya (comparando la huella de la contraseña actual),
+    None en cualquier otro caso.
+    """
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose") != "password_reset":
+        return None
+
+    persona_id = payload.get("sub")
+    if persona_id is None:
+        return None
+
+    persona = db.query(Persona).filter(Persona.id == int(persona_id)).first()
+    if not persona:
+        return None
+
+    huella_actual = (persona.hashed_password or "")[-12:]
+    if payload.get("pwd_fp") != huella_actual:
+        # La contraseña ya cambió desde que se generó este token → usado o viejo.
+        return None
+
+    return persona
+
+
 # ── Autenticación de usuario ──────────────────────────────────────────────────
 
 def authenticate_user(db: Session, email: str, password: str) -> Optional[Persona]:

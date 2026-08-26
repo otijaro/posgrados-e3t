@@ -174,7 +174,7 @@ export default function PlanesEstudioPage() {
 
               <div className="px-5 pb-5 flex gap-2">
                 <Link
-                  href={`/dashboard/planes-estudio/${prog.id}`}
+                  href={`/planes-estudio/${prog.id}`}
                   className="flex-1 text-center text-sm bg-green-700 text-white py-2.5 rounded-lg hover:bg-green-800 transition-colors font-semibold"
                 >
                   Ver malla →

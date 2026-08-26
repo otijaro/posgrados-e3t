@@ -19,17 +19,48 @@ export default function LandingPage() {
       <PublicNav />
 
       {/* Hero */}
-      <section className="bg-gradient-to-br from-green-800 to-green-900 text-white py-12 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="flex items-center gap-4 mb-5 justify-center">
-            <div className="bg-white rounded-xl px-3 py-1.5">
-              <Image src="/logouis.png" alt="UIS" width={90} height={36} className="object-contain" />
-            </div>
-            <div className="w-px h-8 bg-green-600" />
-            <div className="bg-white rounded-xl px-3 py-2">
-              <Image src="/E3T.png" alt="E3T" width={36} height={32} className="object-contain" />
-            </div>
-          </div>
+      <section className="relative overflow-hidden bg-gradient-to-br from-green-800 to-green-900 text-white py-14 px-6">
+        {/* Motivo decorativo: trazos de circuito impreso, en línea con E3T (Eléctrica / Electrónica / Telecomunicaciones) */}
+        <svg
+          className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.14]"
+          viewBox="0 0 1000 360"
+          fill="none"
+          preserveAspectRatio="xMidYMid slice"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <g stroke="currentColor" strokeWidth="1.5">
+            <path d="M0,60 H160 V130 H340 V60 H520" />
+            <path d="M60,0 V40 H260 V180 H180" />
+            <path d="M1000,90 H820 V40 H620" />
+            <path d="M1000,220 H860 V300 H660 V360" />
+            <path d="M900,0 V70 H760" />
+            <path d="M0,240 H120 V300 H0" />
+            <path d="M0,180 H80 V150" />
+            <path d="M420,0 V90 H520 V150" />
+            <path d="M540,360 V270 H700 V210" />
+            <path d="M260,360 V300 H400" />
+          </g>
+          <g fill="currentColor">
+            <circle cx="160" cy="60" r="3.5" />
+            <circle cx="340" cy="130" r="3.5" />
+            <circle cx="520" cy="60" r="3.5" />
+            <circle cx="260" cy="40" r="3.5" />
+            <circle cx="820" cy="90" r="3.5" />
+            <circle cx="620" cy="40" r="3.5" />
+            <circle cx="860" cy="220" r="3.5" />
+            <circle cx="660" cy="300" r="3.5" />
+            <circle cx="760" cy="70" r="3.5" />
+            <circle cx="120" cy="240" r="3.5" />
+            <circle cx="520" cy="90" r="3.5" />
+            <circle cx="700" cy="270" r="3.5" />
+            <circle cx="400" cy="300" r="3.5" />
+          </g>
+        </svg>
+
+        <div className="relative max-w-4xl mx-auto text-center">
+          <span className="inline-block text-[11px] font-semibold tracking-[0.2em] uppercase text-green-300 mb-4">
+            Escuela de Ingeniería Eléctrica, Electrónica y de Telecomunicaciones
+          </span>
           <h1 className="text-2xl md:text-3xl font-bold leading-tight mb-2">
             Gestión de Posgrados — <span className="text-green-300">E3T · UIS</span>
           </h1>
@@ -44,13 +75,13 @@ export default function LandingPage() {
       </section>
 
       {/* Programas */}
-      <section className="py-14 px-6 bg-white">
-        <div className="max-w-5xl mx-auto">
+      <section className="py-14 px-4 sm:px-8 lg:px-14 xl:px-20 bg-white">
+        <div className="w-full">
           <h2 className="text-xl font-bold text-gray-800 text-center mb-2">Programas de Posgrado</h2>
           <p className="text-gray-500 text-sm text-center mb-8">
             6 programas vigentes — 3 maestrías y 3 doctorados
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {programas.map((p) => (
               <a key={p.nombre} href={p.url} target="_blank" rel="noopener noreferrer"
                 className={`rounded-xl border-l-4 ${p.color} ${p.bg} p-5 hover:shadow-md transition-shadow block`}>

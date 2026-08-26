@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import List
+from typing import List, Optional
 
 
 class LoginRequest(BaseModel):
@@ -20,6 +20,18 @@ class UserInfoResponse(BaseModel):
     nombre_completo: str
     email_institucional: str
     roles: List[str]
+    foto_url: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Correo institucional al que se envía el enlace de restablecimiento."""
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Token recibido por correo + nueva contraseña."""
+    token: str
+    new_password: str

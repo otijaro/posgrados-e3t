@@ -6,7 +6,7 @@ import dynamic from "next/dynamic";
 
 const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: false });
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;

@@ -6,7 +6,7 @@ import { getMiPerfil, EstudianteInfo } from "@/lib/api";
 import { StatCard } from "@/components/ui/StatCard";
 import Link from "next/link";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -98,7 +98,7 @@ export default function EstudianteDashboard() {
             </div>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-100">
-            <a href="/dashboard/estudiante/proyecto" className="text-sm text-green-700 font-semibold hover:underline">Ver detalle del proyecto →</a>
+            <Link href="/dashboard/estudiante/proyecto" className="text-sm text-green-700 font-semibold hover:underline">Ver detalle del proyecto →</Link>
           </div>
         </div>
       ) : (
@@ -110,7 +110,7 @@ export default function EstudianteDashboard() {
       <div className="bg-white rounded-xl shadow-sm p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-800">📋 Solicitudes Recientes</h2>
-          <a href="/dashboard/estudiante/solicitudes" className="text-sm text-green-700 font-semibold hover:underline">Ver todas →</a>
+          <Link href="/dashboard/estudiante/solicitudes" className="text-sm text-green-700 font-semibold hover:underline">Ver todas →</Link>
         </div>
         {solicitudes.length === 0 ? (
           <p className="text-sm text-gray-400 italic">No tienes solicitudes registradas.</p>

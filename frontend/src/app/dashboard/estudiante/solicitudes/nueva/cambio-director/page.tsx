@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { getMiPerfil, EstudianteInfo } from "@/lib/api";
+import { getMiPerfil, EstudianteInfo, getDocentesDisponibles, DocenteOpcion } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -38,6 +38,9 @@ type FormErrors = {
 export default function CambioDirectorPage() {
   const [user, setUser]     = useState<UserInfo | null>(null);
   const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
+  const [docentes, setDocentes] = useState<DocenteOpcion[]>([]);
+  const [directorExterno, setDirectorExterno]     = useState(false);
+  const [codirectorExterno, setCodirectorExterno] = useState(false);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
@@ -57,8 +60,8 @@ export default function CambioDirectorPage() {
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil()])
-      .then(([u, p]) => { setUser(u); setPerfil(p); })
+    Promise.all([getMe(), getMiPerfil(), getDocentesDisponibles()])
+      .then(([u, p, docs]) => { setUser(u); setPerfil(p); setDocentes(docs); })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
   }, []);
@@ -217,28 +220,58 @@ export default function CambioDirectorPage() {
   );
 
   const CampoPersona = ({
-    label, value, onChange, errorNombre, errorCorreo,
+    label, value, onChange, errorNombre, errorCorreo, esExterno, onExternoChange,
   }: {
     label: string;
     value: Persona;
     onChange: (campo: keyof Persona, val: string) => void;
     errorNombre?: string;
     errorCorreo?: string;
+    esExterno: boolean;
+    onExternoChange: (v: boolean) => void;
   }) => (
     <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-3">
-      <p className="text-sm font-semibold text-gray-600">{label}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-600">{label}</p>
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={esExterno}
+            onChange={(e) => { onExternoChange(e.target.checked); onChange("nombre", ""); }}
+            className="rounded border-gray-300"
+          />
+          Es externo (no está en la lista)
+        </label>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">
             Nombre completo <span className="text-red-500">*</span>
           </label>
-          <input
-            type="text"
-            value={value.nombre}
-            onChange={(e) => onChange("nombre", e.target.value)}
-            placeholder="Nombre completo"
-            className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorNombre ? "border-red-400" : "border-gray-200"}`}
-          />
+          {esExterno ? (
+            <input
+              type="text"
+              value={value.nombre}
+              onChange={(e) => onChange("nombre", e.target.value)}
+              placeholder="Nombre completo"
+              className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorNombre ? "border-red-400" : "border-gray-200"}`}
+            />
+          ) : (
+            <select
+              value={value.nombre}
+              onChange={(e) => {
+                onChange("nombre", e.target.value);
+                const doc = docentes.find((d) => d.nombre_completo === e.target.value);
+                if (doc) onChange("correo", doc.email_institucional);
+              }}
+              className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white appearance-none ${errorNombre ? "border-red-400" : "border-gray-200"}`}
+            >
+              <option value="">Selecciona de la lista...</option>
+              {docentes.map((d) => (
+                <option key={d.id} value={d.nombre_completo}>{d.nombre_completo}</option>
+              ))}
+            </select>
+          )}
           {errorNombre && <p className="text-red-500 text-xs mt-0.5">{errorNombre}</p>}
         </div>
         <div>
@@ -250,7 +283,7 @@ export default function CambioDirectorPage() {
             value={value.correo}
             onChange={(e) => onChange("correo", e.target.value)}
             placeholder="correo@uis.edu.co"
-            className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorCorreo ? "border-red-400" : "border-gray-200"}`}
+            className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorCorreo ? "border-red-400" : "border-gray-200"}`}
           />
           {errorCorreo && <p className="text-red-500 text-xs mt-0.5">{errorCorreo}</p>}
         </div>
@@ -360,6 +393,8 @@ export default function CambioDirectorPage() {
                 }}
                 errorNombre={errors.nuevo_director_nombre}
                 errorCorreo={errors.nuevo_director_correo}
+                esExterno={directorExterno}
+                onExternoChange={setDirectorExterno}
               />
             )}
 
@@ -373,6 +408,8 @@ export default function CambioDirectorPage() {
                 }}
                 errorNombre={errors.nuevo_codirector_nombre}
                 errorCorreo={errors.nuevo_codirector_correo}
+                esExterno={codirectorExterno}
+                onExternoChange={setCodirectorExterno}
               />
             )}
           </div>
