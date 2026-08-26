@@ -130,16 +130,15 @@ const categorias = ["Todas", ...Array.from(new Set(tiposSolicitud.map((t) => t.c
 export default function NuevaSolicitudPage() {
   const router = useRouter();
   const [categoriaActiva, setCategoriaActiva] = useState("Todas");
-  const [seleccionado, setSeleccionado] = useState<string | null>(null);
 
   const filtrados =
     categoriaActiva === "Todas"
       ? tiposSolicitud
       : tiposSolicitud.filter((t) => t.categoria === categoriaActiva);
 
-  const handleContinuar = () => {
-    if (!seleccionado || !rutas[seleccionado]) return;
-    router.push(rutas[seleccionado]);
+  const handleSeleccionar = (id: string, disponible: boolean) => {
+    if (!disponible || !rutas[id]) return;
+    router.push(rutas[id]);
   };
 
   return (
@@ -174,21 +173,14 @@ export default function NuevaSolicitudPage() {
         {filtrados.map((tipo) => (
           <button
             key={tipo.id}
-            onClick={() => tipo.disponible && setSeleccionado(tipo.id)}
+            onClick={() => handleSeleccionar(tipo.id, tipo.disponible)}
             disabled={!tipo.disponible}
             className={`relative text-left border-2 rounded-xl p-5 transition-all ${
               !tipo.disponible
                 ? "border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed"
-                : seleccionado === tipo.id
-                ? `${tipo.color} border-opacity-100 ring-2 ring-green-500 ring-offset-2`
-                : `${tipo.color} border-gray-200`
+                : `${tipo.color} border-gray-200 hover:ring-2 hover:ring-green-500 hover:ring-offset-2`
             }`}
           >
-            {seleccionado === tipo.id && (
-              <div className="absolute top-3 right-3 w-6 h-6 bg-green-600 rounded-full flex items-center justify-center">
-                <span className="text-white text-xs font-bold">✓</span>
-              </div>
-            )}
             {!tipo.disponible && (
               <div className="absolute top-3 right-3">
                 <span className="text-xs bg-gray-200 text-gray-500 px-2 py-0.5 rounded-full font-medium">Próximamente</span>
@@ -206,28 +198,6 @@ export default function NuevaSolicitudPage() {
             </div>
           </button>
         ))}
-      </div>
-
-      <div className={`sticky bottom-6 transition-all duration-300 ${seleccionado ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"}`}>
-        <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            {seleccionado && (
-              <>
-                <span className="text-2xl">{tiposSolicitud.find((t) => t.id === seleccionado)?.icono}</span>
-                <div>
-                  <p className="text-xs text-gray-400">Solicitud seleccionada</p>
-                  <p className="text-sm font-bold text-gray-800">{tiposSolicitud.find((t) => t.id === seleccionado)?.titulo}</p>
-                </div>
-              </>
-            )}
-          </div>
-          <button
-            onClick={handleContinuar}
-            className="bg-green-700 text-white px-8 py-2.5 rounded-lg hover:bg-green-800 transition-colors font-semibold text-sm flex-shrink-0"
-          >
-            Continuar →
-          </button>
-        </div>
       </div>
     </div>
   );

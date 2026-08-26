@@ -113,7 +113,7 @@ function authHeaders(): HeadersInit {
 // ─── Programas ────────────────────────────────────────────────
 
 export async function getProgramas(): Promise<Programa[]> {
-  const res = await fetch(`${API_URL}/api/programas/`);
+  const res = await fetch(`${API_URL}/api/programas`);
   if (!res.ok) throw new Error("Error al obtener programas");
   return res.json();
 }
@@ -224,7 +224,7 @@ export async function getSolicitudes(
   const params = new URLSearchParams();
   if (id_programa) params.append("id_programa", String(id_programa));
   if (estado) params.append("estado", estado);
-  const res = await fetch(`${API_URL}/api/solicitudes/?${params.toString()}`);
+  const res = await fetch(`${API_URL}/api/solicitudes?${params.toString()}`);
   if (!res.ok) throw new Error("Error al obtener solicitudes");
   return res.json();
 }

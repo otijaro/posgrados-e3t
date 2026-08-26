@@ -114,7 +114,7 @@ def _verificar_editable(s: Solicitud) -> tuple[bool, str]:
 
 # ── GET solicitudes ───────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[SolicitudListResponse])
+@router.get("", response_model=List[SolicitudListResponse])
 def listar_solicitudes(
     id_programa: Optional[int] = None,
     estado: Optional[str] = None,

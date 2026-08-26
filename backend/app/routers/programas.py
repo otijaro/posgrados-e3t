@@ -11,7 +11,7 @@ from app.schemas import ProgramaResponse
 router = APIRouter(prefix="/programas", tags=["Programas"])
 
 
-@router.get("/", response_model=List[ProgramaResponse])
+@router.get("", response_model=List[ProgramaResponse])
 def listar_programas(db: Session = Depends(get_db)):
     programas = db.query(ProgramaPosgrado).filter(
         ProgramaPosgrado.activo == 1
