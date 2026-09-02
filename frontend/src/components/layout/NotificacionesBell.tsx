@@ -88,7 +88,7 @@ export default function NotificacionesBell() {
           if (d.solicitudes_pendientes > 0) {
             nuevos.push({
               icono: "📋", texto: "solicitud(es) de tus estudiantes",
-              cantidad: d.solicitudes_pendientes, href: "/dashboard/director",
+              cantidad: d.solicitudes_pendientes, href: "/dashboard/director/solicitudes",
             });
           }
           const [firmas, avalGrupo] = await Promise.all([

@@ -122,9 +122,9 @@ def obtener_pdf_solicitud(
     ).fetchone()
 
     if not row:
-        # Fallback: URL guardada directamente en la solicitud
+        # Fallback: URL guardada directamente en la solicitud (columna real: documentos_adjuntos)
         sol = db.execute(
-            text("SELECT documento_url FROM solicitud WHERE id = :id"),
+            text("SELECT documentos_adjuntos FROM solicitud WHERE id = :id"),
             {"id": id_solicitud}
         ).fetchone()
         if not sol or not sol[0]:

@@ -143,25 +143,32 @@ export default function SolicitudesPage() {
                     )}
 
                     {/* Estado del flujo */}
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="font-medium">Flujo:</span>
-                      {["enviada", "en_revision", "en_comite", "aprobada"].map((paso, i) => {
-                        const estados = ["enviada", "en_revision", "en_comite", "aprobada"];
-                        const idx = estados.indexOf(s.estado);
-                        const rechazada = s.estado === "rechazada";
-                        return (
-                          <span key={paso} className="flex items-center gap-1">
-                            {i > 0 && <span className="text-gray-300">›</span>}
-                            <span className={`px-2 py-0.5 rounded-full font-medium ${
-                              rechazada && i === idx ? "bg-red-100 text-red-600" :
-                              i <= idx ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
-                            }`}>
-                              {["Enviada", "Director", "Coordinador", "Aprobada"][i]}
+                    {["enviada", "en_revision", "en_comite", "aprobada"].includes(s.estado) ? (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="font-medium">Flujo:</span>
+                        {["enviada", "en_revision", "en_comite", "aprobada"].map((paso, i) => {
+                          const estados = ["enviada", "en_revision", "en_comite", "aprobada"];
+                          const idx = estados.indexOf(s.estado);
+                          return (
+                            <span key={paso} className="flex items-center gap-1">
+                              {i > 0 && <span className="text-gray-300">›</span>}
+                              <span className={`px-2 py-0.5 rounded-full font-medium ${
+                                i <= idx ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                              }`}>
+                                {["Enviada", "Director", "Coordinador", "Aprobada"][i]}
+                              </span>
                             </span>
-                          </span>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-medium text-gray-500">Flujo:</span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${estadoColor[s.estado] ?? "bg-gray-100 text-gray-600"}`}>
+                          {s.estado === "rechazada" ? "❌ Rechazada en el proceso" : estadoLabel[s.estado] ?? s.estado}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Botón editar */}
                     {s.editable ? (

@@ -55,19 +55,29 @@ export default function CambioTituloPage() {
     setErrors(p => ({ ...p, documento: undefined }));
   };
 
-  const validar = (): boolean => {
+  const ORDEN_CAMPOS = ["nuevo_titulo", "justificacion", "documento"];
+
+  const validar = (): FormErrors => {
     const e: FormErrors = {};
     if (!nuevoTitulo.trim())       e.nuevo_titulo = "El nuevo título es obligatorio.";
     if (!justificacion.trim())     e.justificacion = "La justificación es obligatoria.";
     else if (justificacion.trim().length < 30)
                                    e.justificacion = "La justificación debe tener al menos 30 caracteres.";
     if (!documento)                e.documento = "Debes adjuntar el documento de soporte en PDF.";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    return e;
+  };
+
+  const irAlPrimerError = (e: FormErrors) => {
+    const primerCampo = ORDEN_CAMPOS.find((campo) => e[campo as keyof FormErrors]);
+    if (!primerCampo) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${primerCampo}"]`);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
   };
 
   const handleSubmit = async () => {
-    if (!validar()) return;
+    const e = validar();
+    setErrors(e);
+    if (Object.keys(e).length > 0) { irAlPrimerError(e); return; }
     setEnviando(true);
     setErrorServidor(null);
     try {
@@ -193,6 +203,7 @@ export default function CambioTituloPage() {
             <input
               type="text"
               value={nuevoTitulo}
+              data-field="nuevo_titulo"
               onChange={(e) => { setNuevoTitulo(e.target.value); setErrors(p => ({ ...p, nuevo_titulo: undefined })); }}
               placeholder="Escribe el nuevo título completo del trabajo de grado"
               className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.nuevo_titulo ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -209,6 +220,7 @@ export default function CambioTituloPage() {
           </div>
           <textarea
             value={justificacion}
+            data-field="justificacion"
             onChange={(e) => { setJustificacion(e.target.value); setErrors(p => ({ ...p, justificacion: undefined })); }}
             rows={4}
             placeholder="Explica los motivos por los cuales solicitas el cambio de título (mínimo 30 caracteres)."
@@ -228,7 +240,7 @@ export default function CambioTituloPage() {
             <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">5</span>
             <h2 className="text-base font-bold text-gray-700">Documento de Soporte</h2>
           </div>
-          <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+          <div data-field="documento" tabIndex={-1} className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
             errors.documento ? "border-red-300 bg-red-50"
             : nombreArchivo  ? "border-green-400 bg-green-50"
             : "border-gray-200 hover:border-green-400 hover:bg-green-50"

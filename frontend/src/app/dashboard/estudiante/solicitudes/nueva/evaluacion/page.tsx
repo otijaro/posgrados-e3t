@@ -112,7 +112,7 @@ export default function SolicitudEvaluacionPage() {
 
   // ── Validación ────────────────────────────────────────────────────────────
 
-  const validar = (): boolean => {
+  const validar = (): FormErrors => {
     const e: FormErrors = {};
     if (!form.titulo.trim())             e.titulo = "El título es obligatorio.";
     if (!form.resumen.trim())            e.resumen = "El resumen es obligatorio.";
@@ -132,14 +132,46 @@ export default function SolicitudEvaluacionPage() {
     });
     if (hayErrorJurado) { e.jurados = "Completa todos los campos de los jurados."; e.jurado_detalle = detalle; }
 
-    setErrors(e);
-    return Object.keys(e).filter(k => k !== "jurado_detalle").length === 0;
+    return e;
+  };
+
+  const irAlPrimerError = (e: FormErrors) => {
+    const orden: string[] = ["titulo", "resumen", "tipo_evaluacion"];
+    if (e.jurado_detalle) {
+      jurados.forEach((_, idx) => {
+        const det = e.jurado_detalle?.[idx];
+        if (!det) return;
+        (["nombre", "institucion", "correo"] as (keyof Jurado)[]).forEach((campo) => {
+          if (det[campo]) orden.push(`jurado-${idx}-${campo}`);
+        });
+      });
+    }
+    orden.push("documento");
+
+    const primerCampo = orden.find((campo) => {
+      if (campo === "titulo") return !!e.titulo;
+      if (campo === "resumen") return !!e.resumen;
+      if (campo === "tipo_evaluacion") return !!e.tipo_evaluacion;
+      if (campo === "documento") return !!e.documento;
+      return campo.startsWith("jurado-");
+    });
+    if (!primerCampo) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${primerCampo}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus({ preventScroll: true });
+    }
   };
 
   // ── Envío ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
-    if (!validar()) return;
+    const e = validar();
+    setErrors(e);
+    if (Object.keys(e).filter(k => k !== "jurado_detalle").length > 0) {
+      irAlPrimerError(e);
+      return;
+    }
     setEnviando(true);
     setErrorServidor(null);
     try {
@@ -251,6 +283,7 @@ export default function SolicitudEvaluacionPage() {
             <input
               type="text"
               value={form.titulo}
+              data-field="titulo"
               onChange={(e) => { setForm(p => ({ ...p, titulo: e.target.value })); setErrors(p => ({ ...p, titulo: undefined })); }}
               className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.titulo ? "border-red-400 bg-red-50" : "border-gray-200"}`}
             />
@@ -263,6 +296,7 @@ export default function SolicitudEvaluacionPage() {
             </label>
             <textarea
               value={form.resumen}
+              data-field="resumen"
               onChange={(e) => { setForm(p => ({ ...p, resumen: e.target.value })); setErrors(p => ({ ...p, resumen: undefined })); }}
               rows={5}
               placeholder="Describe el objetivo, metodología y resultados esperados (mínimo 50 caracteres)."
@@ -280,6 +314,7 @@ export default function SolicitudEvaluacionPage() {
             </label>
             <select
               value={form.tipo_evaluacion}
+              data-field="tipo_evaluacion"
               onChange={(e) => { setForm(p => ({ ...p, tipo_evaluacion: e.target.value })); setErrors(p => ({ ...p, tipo_evaluacion: undefined })); }}
               className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.tipo_evaluacion ? "border-red-400" : "border-gray-200"}`}
             >
@@ -326,6 +361,7 @@ export default function SolicitudEvaluacionPage() {
                         <input
                           type={campo === "correo" ? "email" : "text"}
                           value={j[campo]}
+                          data-field={`jurado-${idx}-${campo}`}
                           onChange={(e) => actualizarJurado(idx, campo, e.target.value)}
                           className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${det[campo] ? "border-red-400" : "border-gray-200"}`}
                         />
@@ -354,7 +390,7 @@ export default function SolicitudEvaluacionPage() {
             <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
             <h2 className="text-base font-bold text-gray-700">Documento a Evaluar</h2>
           </div>
-          <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${errors.documento ? "border-red-300 bg-red-50" : nombreArchivo ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-green-400 hover:bg-green-50"}`}>
+          <div data-field="documento" tabIndex={-1} className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${errors.documento ? "border-red-300 bg-red-50" : nombreArchivo ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-green-400 hover:bg-green-50"}`}>
             {nombreArchivo ? (
               <div className="space-y-2">
                 <span className="text-4xl">📄</span>

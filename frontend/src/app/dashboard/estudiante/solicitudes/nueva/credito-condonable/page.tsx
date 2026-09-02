@@ -83,7 +83,12 @@ export default function CreditoCondonablePage() {
     setErrors(p => ({ ...p, [campo]: undefined }));
   }
 
-  const validar = (): boolean => {
+  const ORDEN_CAMPOS = [
+    "periodo", "modalidad", "materia_asignada", "horas_semanales",
+    "justificacion", "carta_director",
+  ];
+
+  const validar = (): FormErrors => {
     const e: FormErrors = {};
     if (!/^\d{4}-[12]$/.test(periodo)) e.periodo = "Formato esperado: AAAA-1 o AAAA-2 (ej. 2026-2).";
     if (!modalidad)                    e.modalidad = "Selecciona la modalidad.";
@@ -95,12 +100,20 @@ export default function CreditoCondonablePage() {
     else if (justificacion.trim().length < 30)
                                         e.justificacion = "La justificación debe tener al menos 30 caracteres.";
     if (!archivos.carta_director)      e.carta_director = "Debes adjuntar la carta de aval del director.";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    return e;
+  };
+
+  const irAlPrimerError = (e: FormErrors) => {
+    const primerCampo = ORDEN_CAMPOS.find((campo) => e[campo as keyof FormErrors]);
+    if (!primerCampo) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${primerCampo}"]`);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
   };
 
   const handleSubmit = async () => {
-    if (!validar()) return;
+    const e = validar();
+    setErrors(e);
+    if (Object.keys(e).length > 0) { irAlPrimerError(e); return; }
     setEnviando(true);
     setErrorServidor(null);
     try {
@@ -167,7 +180,7 @@ export default function CreditoCondonablePage() {
   );
 
   const CampoArchivoUI = ({ campo, label, requerido }: { campo: CampoArchivo; label: string; requerido?: boolean }) => (
-    <div>
+    <div data-field={campo} tabIndex={-1}>
       <p className="text-sm font-medium text-gray-700 mb-1.5">
         {label} {requerido && <span className="text-red-500">*</span>}
       </p>
@@ -253,6 +266,7 @@ export default function CreditoCondonablePage() {
               <input
                 type="text"
                 value={periodo}
+                data-field="periodo"
                 onChange={(e) => { setPeriodo(e.target.value); setErrors(p => ({ ...p, periodo: undefined })); }}
                 placeholder="2026-2"
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.periodo ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -265,6 +279,7 @@ export default function CreditoCondonablePage() {
               </label>
               <select
                 value={modalidad}
+                data-field="modalidad"
                 onChange={(e) => { setModalidad(e.target.value); setErrors(p => ({ ...p, modalidad: undefined })); }}
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.modalidad ? "border-red-400 bg-red-50" : "border-gray-200"}`}
               >
@@ -284,6 +299,7 @@ export default function CreditoCondonablePage() {
                 <input
                   type="text"
                   value={materiaAsignada}
+                  data-field="materia_asignada"
                   onChange={(e) => { setMateriaAsignada(e.target.value); setErrors(p => ({ ...p, materia_asignada: undefined })); }}
                   placeholder="Nombre de la materia"
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.materia_asignada ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -298,6 +314,7 @@ export default function CreditoCondonablePage() {
                   type="number"
                   min={1}
                   value={horasSemanales}
+                  data-field="horas_semanales"
                   onChange={(e) => { setHorasSemanales(e.target.value); setErrors(p => ({ ...p, horas_semanales: undefined })); }}
                   placeholder="4"
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.horas_semanales ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -316,6 +333,7 @@ export default function CreditoCondonablePage() {
           </div>
           <textarea
             value={justificacion}
+            data-field="justificacion"
             onChange={(e) => { setJustificacion(e.target.value); setErrors(p => ({ ...p, justificacion: undefined })); }}
             rows={4}
             placeholder="Explica los motivos de tu solicitud de crédito condonable (mínimo 30 caracteres)."

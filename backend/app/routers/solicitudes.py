@@ -303,6 +303,20 @@ def director_accion(
         raise HTTPException(status_code=404, detail="No hay flujo pendiente para el director")
 
     if body.accion == "aprobar":
+        # Si la solicitud tiene un documento adjunto, exigir que ya esté firmado
+        # por el director antes de poder aprobar (ya sea en este mismo request,
+        # o ya guardado previamente vía /firmas/guardar-firmado).
+        if s.documentos_adjuntos and not body.documento_firmado:
+            firma = db.execute(
+                text("SELECT firmado_director FROM documento_firma WHERE id_solicitud = :id"),
+                {"id": solicitud_id}
+            ).fetchone()
+            if not firma or not firma[0]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Debe firmar el documento antes de poder aprobar la solicitud"
+                )
+
         # Director aprueba y firma → pasa al coordinador
         flujo.estado          = "aprobado"
         flujo.fecha_respuesta = datetime.utcnow()

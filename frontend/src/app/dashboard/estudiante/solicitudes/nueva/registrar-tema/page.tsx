@@ -48,6 +48,7 @@ const CampoPersona = memo(({
           Nombre completo {!opcionalLabel && <span className="text-red-500">*</span>}
         </label>
         <input type="text" value={nombre} onChange={e => onNombre(e.target.value)}
+          data-field="director_nombre"
           placeholder="Ej. Juan Manuel Rey López"
           className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorNombre ? "border-red-400" : "border-gray-200"}`} />
         {errorNombre && <p className="text-red-500 text-xs mt-0.5">{errorNombre}</p>}
@@ -57,6 +58,7 @@ const CampoPersona = memo(({
           Correo institucional {!opcionalLabel && <span className="text-red-500">*</span>}
         </label>
         <input type="email" value={correo} onChange={e => onCorreo(e.target.value)}
+          data-field="director_correo"
           placeholder="Ej. juan.rey@uis.edu.co"
           className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorCorreo ? "border-red-400" : "border-gray-200"}`} />
         {errorCorreo && <p className="text-red-500 text-xs mt-0.5">{errorCorreo}</p>}
@@ -176,7 +178,13 @@ export default function RegistrarTemaPage() {
 
   const esCorreoValido = (c: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
 
-  const validar = (): boolean => {
+  const ORDEN_CAMPOS = [
+    "director_nombre", "director_correo", "codirector_correo",
+    "titulo", "linea_estrategica", "grupo_inv", "area_formacion",
+    "objetivo_general", "alcances",
+  ];
+
+  const validar = (): Record<string, string> => {
     const e: Record<string, string> = {};
     if (!dirNombre.trim())                e.director_nombre   = "Obligatorio.";
     if (!dirCorreo.trim())                e.director_correo   = "Obligatorio.";
@@ -190,11 +198,26 @@ export default function RegistrarTemaPage() {
     if (!objetivo.trim())                 e.objetivo_general  = "Obligatorio.";
     else if (objetivo.trim().length < 30) e.objetivo_general  = "Mínimo 30 caracteres.";
     if (!alcances.trim())                 e.alcances          = "Obligatorio.";
-    setErrors(e); return Object.keys(e).length === 0;
+    return e;
+  };
+
+  const irAlPrimerError = (erroresEncontrados: Record<string, string>) => {
+    const primerCampo = ORDEN_CAMPOS.find((campo) => erroresEncontrados[campo]);
+    if (!primerCampo) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${primerCampo}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus({ preventScroll: true });
+    }
   };
 
   const handleSubmit = async () => {
-    if (!validar()) return;
+    const erroresEncontrados = validar();
+    setErrors(erroresEncontrados);
+    if (Object.keys(erroresEncontrados).length > 0) {
+      irAlPrimerError(erroresEncontrados);
+      return;
+    }
     setEnviando(true); setErrorServidor(null);
     try {
       const formData = new FormData();
@@ -327,6 +350,7 @@ export default function RegistrarTemaPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Correo institucional</label>
                   <input type="email" value={codCorreo} onChange={e => onCodCorreo(e.target.value)}
+                    data-field="codirector_correo"
                     placeholder="correo@uis.edu.co"
                     className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_correo ? "border-red-400" : "border-gray-200"}`} />
                   {errors.codirector_correo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_correo}</p>}
@@ -359,6 +383,7 @@ export default function RegistrarTemaPage() {
                 Título del Trabajo <span className="text-red-500">*</span>
               </label>
               <input type="text" value={titulo}
+                data-field="titulo"
                 onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: "" })); }}
                 placeholder="Título completo del trabajo de grado"
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.titulo ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -375,6 +400,7 @@ export default function RegistrarTemaPage() {
                   className="text-blue-600 hover:underline break-all">{LINK_LINEA}</a>
               </div>
               <input type="text" value={lineaEstrategica}
+                data-field="linea_estrategica"
                 onChange={e => { setLineaEstrategica(e.target.value); setErrors(p => ({ ...p, linea_estrategica: "" })); }}
                 placeholder="Ej. Energía eléctrica y telecomunicaciones"
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.linea_estrategica ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -389,6 +415,7 @@ export default function RegistrarTemaPage() {
                 </label>
                 <select
                   value={grupoInv}
+                  data-field="grupo_inv"
                   onChange={e => { setGrupoInv(e.target.value); setErrors(p => ({ ...p, grupo_inv: "" })); }}
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white appearance-none ${errors.grupo_inv ? "border-red-400 bg-red-50" : "border-gray-200"}`}>
                   <option value="">Seleccionar grupo...</option>
@@ -404,6 +431,7 @@ export default function RegistrarTemaPage() {
                   Área de Formación <span className="text-red-500">*</span>
                 </label>
                 <input type="text" value={areaFormacion}
+                  data-field="area_formacion"
                   onChange={e => { setAreaFormacion(e.target.value); setErrors(p => ({ ...p, area_formacion: "" })); }}
                   placeholder="Ej. Ingeniería Electrónica"
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.area_formacion ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -416,6 +444,7 @@ export default function RegistrarTemaPage() {
                 Objetivo General <span className="text-red-500">*</span>
               </label>
               <textarea value={objetivo} rows={4}
+                data-field="objetivo_general"
                 onChange={e => { setObjetivo(e.target.value); setErrors(p => ({ ...p, objetivo_general: "" })); }}
                 placeholder="Describe el objetivo general del trabajo (mínimo 30 caracteres)."
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${errors.objetivo_general ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -430,6 +459,7 @@ export default function RegistrarTemaPage() {
                 Descripción de los Alcances <span className="text-red-500">*</span>
               </label>
               <textarea value={alcances} rows={4}
+                data-field="alcances"
                 onChange={e => { setAlcances(e.target.value); setErrors(p => ({ ...p, alcances: "" })); }}
                 placeholder="Describe los alcances del trabajo de grado."
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${errors.alcances ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
