@@ -19,9 +19,7 @@ services:
     restart: unless-stopped
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: juliamdiaz09/posgrados-backend:latest
     container_name: posgrados_backend
     environment:
       DATABASE_URL: postgresql://posgrados_user:posgrados_pass@db:5432/posgrados_db
@@ -49,15 +47,10 @@ services:
     command: ["sh", "/app/entrypoint.sh"]
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
-        NEXT_PUBLIC_MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+    image: juliamdiaz09/posgrados-frontend:latest
     container_name: posgrados_frontend
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       - backend
     restart: unless-stopped
