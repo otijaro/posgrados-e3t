@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getMiPerfil, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
@@ -18,11 +19,17 @@ type FormErrors = {
   documento?: string;
 };
 
-export default function CambioTituloPage() {
+function CambioTituloForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const idEditar = searchParams.get("editar");
+  const modoEdicion = Boolean(idEditar);
+
   const [user, setUser]     = useState<UserInfo | null>(null);
   const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [documentoExistente, setDocumentoExistente] = useState<string | null>(null);
 
   const [nuevoTitulo, setNuevoTitulo]       = useState("");
   const [justificacion, setJustificacion]   = useState("");
@@ -35,11 +42,23 @@ export default function CambioTituloPage() {
   const [errorServidor, setErrorServidor]   = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil()])
-      .then(([u, p]) => { setUser(u); setPerfil(p); })
+    Promise.all([
+      getMe(),
+      getMiPerfil(),
+      idEditar ? fetch(`${API_URL}/api/solicitudes/${idEditar}`).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
+    ])
+      .then(([u, p, solicitud]) => {
+        setUser(u); setPerfil(p);
+        if (solicitud && solicitud.datos_formulario) {
+          const d = solicitud.datos_formulario;
+          setNuevoTitulo(d.nuevo_titulo ?? "");
+          setJustificacion(d.justificacion ?? "");
+          setDocumentoExistente(solicitud.documento ?? null);
+        }
+      })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [idEditar]);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -63,7 +82,8 @@ export default function CambioTituloPage() {
     if (!justificacion.trim())     e.justificacion = "La justificación es obligatoria.";
     else if (justificacion.trim().length < 30)
                                    e.justificacion = "La justificación debe tener al menos 30 caracteres.";
-    if (!documento)                e.documento = "Debes adjuntar el documento de soporte en PDF.";
+    if (!documento && !(modoEdicion && documentoExistente))
+                                    e.documento = "Debes adjuntar el documento de soporte en PDF.";
     return e;
   };
 
@@ -86,14 +106,21 @@ export default function CambioTituloPage() {
       formData.append("justificacion", justificacion);
       if (documento) formData.append("documento", documento);
 
-      const res = await fetch(`${API_URL}/api/solicitudes/cambio-titulo`, {
-        method: "POST",
+      const url = modoEdicion
+        ? `${API_URL}/api/solicitudes/cambio-titulo/${idEditar}/editar`
+        : `${API_URL}/api/solicitudes/cambio-titulo`;
+      const res = await fetch(url, {
+        method: modoEdicion ? "PUT" : "POST",
         headers: authHeaders(),
         body: formData,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Error al enviar la solicitud.");
+      }
+      if (modoEdicion) {
+        router.push("/dashboard/estudiante/solicitudes");
+        return;
       }
       const resultado = await res.json();
       setRadicado(resultado.numero_radicado);
@@ -151,8 +178,10 @@ export default function CambioTituloPage() {
           <span>›</span>
           <span className="text-gray-700 font-medium">Cambio de Título</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">✏️ Cambio de Título</h1>
-        <p className="text-gray-500 mt-1">Solicita la modificación del título de tu trabajo de grado o tesis.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{modoEdicion ? "✏️ Editar Cambio de Título" : "✏️ Cambio de Título"}</h1>
+        <p className="text-gray-500 mt-1">
+          {modoEdicion ? "Ajusta los datos de tu solicitud y guarda los cambios." : "Solicita la modificación del título de tu trabajo de grado o tesis."}
+        </p>
       </div>
 
       {errorServidor && (
@@ -240,6 +269,12 @@ export default function CambioTituloPage() {
             <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">5</span>
             <h2 className="text-base font-bold text-gray-700">Documento de Soporte</h2>
           </div>
+          {documentoExistente && !nombreArchivo && (
+            <a href={`${API_URL}${documentoExistente}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-green-700 hover:underline mb-2">
+              📄 Ver documento actualmente adjunto
+            </a>
+          )}
           <div data-field="documento" tabIndex={-1} className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
             errors.documento ? "border-red-300 bg-red-50"
             : nombreArchivo  ? "border-green-400 bg-green-50"
@@ -258,7 +293,7 @@ export default function CambioTituloPage() {
               <div className="space-y-3">
                 <span className="text-4xl">📂</span>
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Arrastra tu archivo aquí o</p>
+                  <p className="text-sm font-medium text-gray-700">{modoEdicion ? "Reemplazar documento (opcional) o" : "Arrastra tu archivo aquí o"}</p>
                   <label className="cursor-pointer mt-2 inline-block bg-green-700 text-white text-sm px-5 py-2 rounded-lg hover:bg-green-800 transition-colors font-semibold">
                     Seleccionar PDF
                     <input type="file" accept=".pdf" onChange={handleFile} className="hidden" />
@@ -287,12 +322,20 @@ export default function CambioTituloPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                 </svg>
-                Enviando...
+                {modoEdicion ? "Guardando..." : "Enviando..."}
               </>
-            ) : "Enviar Solicitud →"}
+            ) : (modoEdicion ? "Guardar cambios" : "Enviar Solicitud →")}
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CambioTituloPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>}>
+      <CambioTituloForm />
+    </Suspense>
   );
 }

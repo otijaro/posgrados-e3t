@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getMiPerfil, EstudianteInfo, getDocentesDisponibles, DocenteOpcion } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
@@ -35,7 +36,12 @@ type FormErrors = {
   documento?: string;
 };
 
-export default function CambioDirectorPage() {
+function CambioDirectorForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const idEditar = searchParams.get("editar");
+  const modoEdicion = Boolean(idEditar);
+
   const [user, setUser]     = useState<UserInfo | null>(null);
   const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
   const [docentes, setDocentes] = useState<DocenteOpcion[]>([]);
@@ -43,6 +49,7 @@ export default function CambioDirectorPage() {
   const [codirectorExterno, setCodirectorExterno] = useState(false);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [documentoExistente, setDocumentoExistente] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormData>({
     tipo_cambio:      "",
@@ -60,11 +67,29 @@ export default function CambioDirectorPage() {
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil(), getDocentesDisponibles()])
-      .then(([u, p, docs]) => { setUser(u); setPerfil(p); setDocentes(docs); })
+    Promise.all([
+      getMe(), getMiPerfil(), getDocentesDisponibles(),
+      idEditar ? fetch(`${API_URL}/api/solicitudes/${idEditar}`).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
+    ])
+      .then(([u, p, docs, solicitud]) => {
+        setUser(u); setPerfil(p); setDocentes(docs);
+        if (solicitud && solicitud.datos_formulario) {
+          const d = solicitud.datos_formulario;
+          setForm({
+            tipo_cambio: d.tipo_cambio ?? "",
+            nuevo_director: { nombre: d.nuevo_director ?? "", correo: d.nuevo_director_correo ?? "" },
+            nuevo_codirector: { nombre: d.nuevo_codirector ?? "", correo: d.nuevo_codirector_correo ?? "" },
+            justificacion: d.justificacion ?? "",
+            documento: null,
+          });
+          if (d.nuevo_director && !docs.some((doc) => doc.nombre_completo === d.nuevo_director)) setDirectorExterno(true);
+          if (d.nuevo_codirector && !docs.some((doc) => doc.nombre_completo === d.nuevo_codirector)) setCodirectorExterno(true);
+          setDocumentoExistente(solicitud.documento ?? null);
+        }
+      })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [idEditar]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -127,7 +152,7 @@ export default function CambioDirectorPage() {
     else if (form.justificacion.trim().length < 30)
       e.justificacion = "La justificación debe tener al menos 30 caracteres.";
 
-    if (!form.documento)
+    if (!form.documento && !(modoEdicion && documentoExistente))
       e.documento = "Debes adjuntar el documento de soporte en PDF.";
 
     return e;
@@ -163,8 +188,11 @@ export default function CambioDirectorPage() {
       }
       if (form.documento) formData.append("documento", form.documento);
 
-      const res = await fetch(`${API_URL}/api/solicitudes/cambio-director`, {
-        method: "POST",
+      const url = modoEdicion
+        ? `${API_URL}/api/solicitudes/cambio-director/${idEditar}/editar`
+        : `${API_URL}/api/solicitudes/cambio-director`;
+      const res = await fetch(url, {
+        method: modoEdicion ? "PUT" : "POST",
         headers: authHeaders(),
         body: formData,
       });
@@ -174,6 +202,10 @@ export default function CambioDirectorPage() {
         throw new Error(err.detail || "Error al enviar la solicitud.");
       }
 
+      if (modoEdicion) {
+        router.push("/dashboard/estudiante/solicitudes");
+        return;
+      }
       const resultado = await res.json();
       setRadicado(resultado.numero_radicado);
       setEnviado(true);
@@ -323,8 +355,10 @@ export default function CambioDirectorPage() {
           <span>›</span>
           <span className="text-gray-700 font-medium">Cambio de Director / Codirector</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">👤 Cambio de Director / Codirector</h1>
-        <p className="text-gray-500 mt-1">Solicita el cambio de director, codirector o ambos para tu trabajo de grado.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{modoEdicion ? "✏️ Editar Cambio de Director / Codirector" : "👤 Cambio de Director / Codirector"}</h1>
+        <p className="text-gray-500 mt-1">
+          {modoEdicion ? "Ajusta los datos de tu solicitud y guarda los cambios." : "Solicita el cambio de director, codirector o ambos para tu trabajo de grado."}
+        </p>
       </div>
 
       {errorServidor && (
@@ -471,6 +505,12 @@ export default function CambioDirectorPage() {
             </span>
             <h2 className="text-base font-bold text-gray-700">Documento de Soporte</h2>
           </div>
+          {documentoExistente && !nombreArchivo && (
+            <a href={`${API_URL}${documentoExistente}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-green-700 hover:underline mb-2">
+              📄 Ver documento actualmente adjunto
+            </a>
+          )}
           <div data-field="documento" tabIndex={-1} className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
             errors.documento ? "border-red-300 bg-red-50"
             : nombreArchivo  ? "border-green-400 bg-green-50"
@@ -521,12 +561,20 @@ export default function CambioDirectorPage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                 </svg>
-                Enviando...
+                {modoEdicion ? "Guardando..." : "Enviando..."}
               </>
-            ) : "Enviar Solicitud →"}
+            ) : (modoEdicion ? "Guardar cambios" : "Enviar Solicitud →")}
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CambioDirectorPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>}>
+      <CambioDirectorForm />
+    </Suspense>
   );
 }

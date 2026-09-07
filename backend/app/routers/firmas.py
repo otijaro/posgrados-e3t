@@ -121,23 +121,69 @@ def obtener_pdf_solicitud(
         {"id": id_solicitud}
     ).fetchone()
 
-    if not row:
+    pdf_path = None
+    if row:
+        pdf_path = row[0].lstrip("/")
+    else:
         # Fallback: URL guardada directamente en la solicitud (columna real: documentos_adjuntos)
         sol = db.execute(
             text("SELECT documentos_adjuntos FROM solicitud WHERE id = :id"),
             {"id": id_solicitud}
         ).fetchone()
-        if not sol or not sol[0]:
-            raise HTTPException(status_code=404, detail="No hay PDF para esta solicitud")
-        pdf_path = sol[0].lstrip("/")
-    else:
-        pdf_path = row[0].lstrip("/")
+        if sol and sol[0]:
+            pdf_path = sol[0].lstrip("/")
 
-    if not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {pdf_path}")
+    if pdf_path and os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            return {"pdf_base64": base64.b64encode(f.read()).decode(), "url": pdf_path}
 
-    with open(pdf_path, "rb") as f:
-        return {"pdf_base64": base64.b64encode(f.read()).decode(), "url": pdf_path}
+    # Último recurso: no existe ningún PDF (el estudiante envió sin pasar por
+    # "Firmar"). Si es una solicitud de Registrar Tema, generamos el PDF base
+    # al vuelo a partir de los datos guardados, para no dejar al director sin
+    # nada que ver ni firmar.
+    datos_row = db.execute(
+        text("SELECT datos_formulario FROM solicitud WHERE id = :id"),
+        {"id": id_solicitud}
+    ).fetchone()
+    if datos_row and datos_row[0]:
+        import json as _json
+        try:
+            datos = _json.loads(datos_row[0])
+        except (ValueError, TypeError):
+            datos = {}
+        if datos.get("tipo") == "registrar_tema":
+            from datetime import date as _date
+            hoy = _date.today()
+            payload = {
+                "titulo": datos.get("titulo", ""), "director": datos.get("director", ""),
+                "codirector": datos.get("codirector", ""), "codirector_cargo": datos.get("codirector_cargo", ""),
+                "codirector_entidad": datos.get("codirector_entidad", ""),
+                "linea_estrategica": datos.get("linea_estrategica", ""),
+                "grupo_investigacion": datos.get("grupo_investigacion", ""),
+                "area_formacion": datos.get("area_formacion", ""),
+                "objetivo_general": datos.get("objetivo_general", ""),
+                "descripcion_alcances": datos.get("descripcion_alcances", ""),
+                "anio": str(hoy.year), "mes": f"{hoy.month:02d}", "dia": f"{hoy.day:02d}",
+            }
+            try:
+                pdf_bytes = generar_pdf_tema(payload)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"No hay PDF y no se pudo generar uno: {e}")
+
+            filename = f"tema_{id_solicitud}_generado_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+            filepath = os.path.join(PDFS_DIR, filename)
+            with open(filepath, "wb") as f:
+                f.write(pdf_bytes)
+            url = f"/uploads/pdfs_firmados/{filename}"
+            db.execute(text("UPDATE solicitud SET documentos_adjuntos = :url WHERE id = :id"),
+                       {"url": url, "id": id_solicitud})
+            db.commit()
+            return {"pdf_base64": base64.b64encode(pdf_bytes).decode(), "url": url}
+
+    raise HTTPException(
+        status_code=404,
+        detail="Esta solicitud no tiene ningún documento adjunto y no se pudo generar uno automáticamente."
+    )
 
 
 # ── Guardar PDF firmado y avanzar flujo ───────────────────────────────────────
@@ -199,12 +245,11 @@ async def guardar_pdf_firmado(
                "ord": orden + 1, "est": siguiente_estado,
                "now": now, "sol": body.id_solicitud})
 
-    # Actualizar estado solicitud principal
-    estado_solicitud = "aprobada" if siguiente_estado == "completado" else "en_revision"
-    db.execute(
-        text("UPDATE solicitud SET estado = :est WHERE id = :id"),
-        {"est": estado_solicitud, "id": body.id_solicitud}
-    )
+    # NOTA: el estado de `solicitud` (enviada → en_revision → aprobada, etc.)
+    # lo maneja Únicamente /director/accion, /coordinador/accion y /comite/accion.
+    # Firmar es solo un paso previo (adjuntar el PDF firmado) — si aquí también
+    # cambiáramos `solicitud.estado`, se pisaría con la validación de esos
+    # endpoints ("la solicitud no está en estado enviada") y nunca dejaría aprobar.
     db.commit()
 
     siguiente_firmante = siguiente_estado.replace("pendiente_", "") if siguiente_estado != "completado" else "completado"

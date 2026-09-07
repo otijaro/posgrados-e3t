@@ -22,6 +22,7 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Inicio",          href: "/dashboard/director",                  icon: "🏠", exacto: true },
     { label: "Notificaciones",  href: "/dashboard/director/notificaciones",   icon: "🔔" },
     { label: "Por firmar",      href: "/dashboard/director/solicitudes",      icon: "✍️" },
+    { label: "Historial",       href: "/dashboard/director/historial",        icon: "📚" },
     { label: "Aval grupo inv.", href: "/dashboard/director/firmas-grupo",     icon: "🔬" },
     { label: "Documentos",      href: "/dashboard/documentos",                icon: "📁" },
   ],

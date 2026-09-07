@@ -61,5 +61,12 @@ with engine.connect() as conn:
     except Exception as e:
         print(f"⚠️  {e}")
 
+    # Agregar columna datos_formulario a solicitud si no existe (edicion con formulario precargado)
+    try:
+        conn.execute(text("ALTER TABLE solicitud ADD COLUMN IF NOT EXISTS datos_formulario TEXT;"))
+        print("✅ datos_formulario en solicitud")
+    except Exception as e:
+        print(f"⚠️  {e}")
+
     conn.commit()
     print("\n✅ Migración completada")

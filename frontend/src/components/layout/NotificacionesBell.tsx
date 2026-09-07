@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { getMe, rolPrincipal } from "@/lib/auth";
 import { getMisEstudiantes, getMisSolicitudes, getMiPerfil } from "@/lib/api";
 
@@ -66,17 +67,18 @@ export default function NotificacionesBell() {
   const [eventos, setEventos] = useState<EventoCalendario[]>([]);
   const [cargado, setCargado] = useState(false);
   const contenedorRef = useRef<HTMLDivElement>(null);
+  const pathname = usePathname();
 
-  useEffect(() => {
-    getMe().then(async (u) => {
-      if (!u) return;
-      const rol = rolPrincipal(u);
-      const token = localStorage.getItem("token");
-      if (!token) return;
-      const h = { Authorization: `Bearer ${token}` };
-      const nuevos: ItemPendiente[] = [];
+  const cargarNotificaciones = useCallback(async () => {
+    const u = await getMe();
+    if (!u) return;
+    const rol = rolPrincipal(u);
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    const h = { Authorization: `Bearer ${token}` };
+    const nuevos: ItemPendiente[] = [];
 
-      try {
+    try {
         if (rol === "director") {
           const d = await getMisEstudiantes();
           if (d.reportes_pendientes_aval > 0) {
@@ -154,8 +156,13 @@ export default function NotificacionesBell() {
 
       setItems(nuevos);
       setCargado(true);
-    });
   }, []);
+
+  // Se recarga cada vez que cambia de página (ej. después de aprobar/rechazar
+  // algo y volver), para que los contadores no queden "pegados" a datos viejos.
+  useEffect(() => {
+    cargarNotificaciones();
+  }, [pathname, cargarNotificaciones]);
 
   useEffect(() => {
     function handleClickFuera(e: MouseEvent) {
@@ -172,7 +179,7 @@ export default function NotificacionesBell() {
   return (
     <div ref={contenedorRef} className="fixed top-4 right-4 z-50">
       <button
-        onClick={() => setAbierto((v) => !v)}
+        onClick={() => { setAbierto((v) => !v); if (!abierto) cargarNotificaciones(); }}
         aria-label="Notificaciones"
         className="relative w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow-md border border-gray-100 hover:bg-gray-50 transition-colors"
       >

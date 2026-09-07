@@ -11,15 +11,13 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-const tipoLabel: Record<string, string> = {
-  evaluacion:            "Solicitud de Evaluación",
-  nombramiento_jurado:   "Solicitud de Evaluación",
-  registrar_tema:        "Registrar Tema",
-  cambio_titulo:         "Cambio de Título",
-  cambio_director:       "Cambio de Director / Codirector",
-  credito_condonable:    "Crédito Condonable",
-  prorroga:              "Prórroga",
-  otra:                  "Otra Solicitud",
+// Mapa: valor de datos_formulario.tipo → ruta del formulario "nueva" correspondiente.
+const RUTA_POR_TIPO: Record<string, string> = {
+  registrar_tema:     "/dashboard/estudiante/solicitudes/nueva/registrar-tema",
+  evaluacion:         "/dashboard/estudiante/solicitudes/nueva/evaluacion",
+  cambio_titulo:      "/dashboard/estudiante/solicitudes/nueva/cambio-titulo",
+  cambio_director:    "/dashboard/estudiante/solicitudes/nueva/cambio-director",
+  credito_condonable: "/dashboard/estudiante/solicitudes/nueva/credito-condonable",
 };
 
 interface SolicitudDetalle {
@@ -31,9 +29,10 @@ interface SolicitudDetalle {
   estado: string;
   fecha_creacion: string | null;
   documento: string | null;
+  datos_formulario: { tipo?: string } | null;
 }
 
-export default function EditarSolicitudPage() {
+export default function EditarSolicitudRedirector() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
@@ -42,11 +41,11 @@ export default function EditarSolicitudPage() {
   const [cargando, setCargando]   = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
 
+  // Solo se usan si NO hay datos_formulario (solicitudes antiguas, sin formulario tipado guardado)
   const [asunto, setAsunto]           = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [nuevoDocumento, setNuevoDocumento] = useState<File | null>(null);
   const [errorDocumento, setErrorDocumento] = useState<string | null>(null);
-
   const [guardando, setGuardando]   = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
   const [guardado, setGuardado]     = useState(false);
@@ -60,13 +59,20 @@ export default function EditarSolicitudPage() {
         return r.json();
       })
       .then((data: SolicitudDetalle) => {
+        const tipo = data.datos_formulario?.tipo;
+        if (tipo && RUTA_POR_TIPO[tipo]) {
+          // Formulario tipado disponible → reabrir el mismo formulario de creación, precargado.
+          router.replace(`${RUTA_POR_TIPO[tipo]}?editar=${id}`);
+          return;
+        }
+        // Solicitud antigua sin datos_formulario → fallback genérico (edición de texto libre).
         setSolicitud(data);
         setAsunto(data.asunto ?? "");
         setDescripcion(data.descripcion ?? "");
+        setCargando(false);
       })
-      .catch((e: Error) => setErrorCarga(e.message))
-      .finally(() => setCargando(false));
-  }, [id]);
+      .catch((e: Error) => { setErrorCarga(e.message); setCargando(false); });
+  }, [id, router]);
 
   function handleDocumento(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] || null;
@@ -140,6 +146,7 @@ export default function EditarSolicitudPage() {
     );
   }
 
+  // Fallback para solicitudes antiguas sin datos_formulario estructurado.
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
@@ -150,13 +157,12 @@ export default function EditarSolicitudPage() {
         </div>
         <h1 className="text-2xl font-bold text-gray-800">✏️ Editar Solicitud</h1>
         <p className="text-gray-500 mt-1">
-          Puedes ajustar el asunto, el contenido y el documento adjunto mientras la solicitud siga en revisión del director.
+          Esta solicitud es anterior a la actualización del sistema, así que no tiene un formulario
+          específico guardado — puedes editar el texto completo directamente.
         </p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm divide-y divide-gray-100">
-
-        {/* Info no editable */}
         <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <p className="text-xs font-medium text-gray-500 mb-1">Radicado</p>
@@ -164,7 +170,7 @@ export default function EditarSolicitudPage() {
           </div>
           <div>
             <p className="text-xs font-medium text-gray-500 mb-1">Tipo</p>
-            <p className="text-sm text-gray-700">{tipoLabel[solicitud.tipo_solicitud] ?? solicitud.tipo_solicitud}</p>
+            <p className="text-sm text-gray-700">{solicitud.tipo_solicitud}</p>
           </div>
           <div>
             <p className="text-xs font-medium text-gray-500 mb-1">Fecha de creación</p>
@@ -172,7 +178,6 @@ export default function EditarSolicitudPage() {
           </div>
         </div>
 
-        {/* Campos editables */}
         <div className="p-6 space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Asunto</label>
@@ -186,9 +191,7 @@ export default function EditarSolicitudPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Contenido de la solicitud
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Contenido de la solicitud</label>
             <textarea
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
@@ -196,9 +199,6 @@ export default function EditarSolicitudPage() {
               className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-800 font-mono
                          focus:outline-none focus:ring-2 focus:ring-green-500 resize-y"
             />
-            <p className="text-xs text-gray-400 mt-1">
-              Este es el texto completo que se envió con la solicitud original — edítalo con cuidado, respetando el formato.
-            </p>
           </div>
 
           <div>
@@ -245,7 +245,6 @@ export default function EditarSolicitudPage() {
           </div>
         )}
 
-        {/* Botones */}
         <div className="p-6 flex items-center justify-between bg-gray-50 rounded-b-xl">
           <Link href="/dashboard/estudiante/solicitudes" className="text-sm text-gray-500 hover:text-gray-700 font-medium">
             ← Cancelar

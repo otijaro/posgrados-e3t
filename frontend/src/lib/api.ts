@@ -253,3 +253,50 @@ export async function crearSolicitudEvaluacion(
 
   return res.json();
 }
+
+export async function editarSolicitudEvaluacion(
+  id: number,
+  data: SolicitudEvaluacionPayload
+): Promise<{ mensaje: string; id: number }> {
+  const formData = new FormData();
+  formData.append("titulo", data.titulo);
+  formData.append("resumen", data.resumen);
+  formData.append("posibles_jurados", data.posibles_jurados);
+  formData.append("tipo_evaluacion", data.tipo_evaluacion);
+  formData.append("id_programa", String(data.id_programa));
+  if (data.documento) formData.append("documento", data.documento);
+
+  const res = await fetch(`${API_URL}/api/solicitudes/evaluacion/${id}/editar`, {
+    method: "PUT",
+    headers: authHeaders(),
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.detail || "Error al actualizar la solicitud");
+  }
+
+  return res.json();
+}
+
+export interface SolicitudDetalle {
+  id: number;
+  numero_radicado: string;
+  tipo_solicitud: string;
+  asunto: string;
+  descripcion: string;
+  estado: string;
+  fecha_creacion: string | null;
+  documento: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  datos_formulario: Record<string, any> | null;
+}
+
+export async function getSolicitudDetalle(id: number): Promise<SolicitudDetalle> {
+  const res = await fetch(`${API_URL}/api/solicitudes/${id}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) throw new Error("Error al obtener el detalle de la solicitud");
+  return res.json();
+}

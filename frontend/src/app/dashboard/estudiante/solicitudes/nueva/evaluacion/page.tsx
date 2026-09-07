@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
-import { getProgramas, crearSolicitudEvaluacion, getMiPerfil, Programa, EstudianteInfo } from "@/lib/api";
+import { useSearchParams, useRouter } from "next/navigation";
+import { getProgramas, crearSolicitudEvaluacion, editarSolicitudEvaluacion, getSolicitudDetalle, getMiPerfil, Programa, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 // Tipos de evaluación según nivel del programa
 const TIPOS_DOCTORADO = [
@@ -40,12 +43,18 @@ type FormErrors = Partial<Record<keyof FormData, string>> & {
   jurado_detalle?: Record<number, Partial<Jurado>>;
 };
 
-export default function SolicitudEvaluacionPage() {
+function SolicitudEvaluacionForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const idEditar = searchParams.get("editar");
+  const modoEdicion = Boolean(idEditar);
+
   const [user, setUser]         = useState<UserInfo | null>(null);
   const [perfil, setPerfil]     = useState<EstudianteInfo | null>(null);
   const [programas, setProgramas] = useState<Programa[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [documentoExistente, setDocumentoExistente] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormData>({
     titulo: "",
@@ -63,18 +72,37 @@ export default function SolicitudEvaluacionPage() {
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil(), getProgramas()])
-      .then(([u, p, progs]) => {
+    Promise.all([
+      getMe(), getMiPerfil(), getProgramas(),
+      idEditar ? getSolicitudDetalle(Number(idEditar)).catch(() => null) : Promise.resolve(null),
+    ])
+      .then(([u, p, progs, solicitud]) => {
         setUser(u);
         setPerfil(p);
         setProgramas(progs);
-        if (p.proyecto?.titulo) {
+        if (solicitud && solicitud.datos_formulario) {
+          const d = solicitud.datos_formulario;
+          setForm({
+            titulo: d.titulo ?? "",
+            resumen: d.resumen ?? "",
+            tipo_evaluacion: d.tipo_evaluacion ?? "",
+            documento: null,
+          });
+          const juradosParseados = (d.posibles_jurados as string ?? "")
+            .split("\n").filter(Boolean)
+            .map((linea: string) => {
+              const [nombre, institucion, correo] = linea.split("|").map((s) => s.trim());
+              return { nombre: nombre ?? "", institucion: institucion ?? "", correo: correo ?? "" };
+            });
+          if (juradosParseados.length >= 3) setJurados(juradosParseados);
+          setDocumentoExistente(solicitud.documento ?? null);
+        } else if (p.proyecto?.titulo) {
           setForm((prev) => ({ ...prev, titulo: p.proyecto!.titulo }));
         }
       })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [idEditar]);
 
   // Resetear tipo_evaluacion si cambia el programa
   const tiposDisponibles = getTiposEvaluacion(perfil?.programa);
@@ -118,7 +146,8 @@ export default function SolicitudEvaluacionPage() {
     if (!form.resumen.trim())            e.resumen = "El resumen es obligatorio.";
     if (form.resumen.trim().length < 50) e.resumen = "El resumen debe tener al menos 50 caracteres.";
     if (!form.tipo_evaluacion)           e.tipo_evaluacion = "Selecciona el tipo de evaluación.";
-    if (!form.documento)                 e.documento = "Debes adjuntar el documento a evaluar.";
+    if (!form.documento && !(modoEdicion && documentoExistente))
+                                        e.documento = "Debes adjuntar el documento a evaluar.";
 
     const detalle: Record<number, Partial<Jurado>> = {};
     let hayErrorJurado = false;
@@ -175,14 +204,20 @@ export default function SolicitudEvaluacionPage() {
     setEnviando(true);
     setErrorServidor(null);
     try {
-      const resultado = await crearSolicitudEvaluacion({
+      const payload = {
         titulo:           form.titulo,
         resumen:          form.resumen,
         posibles_jurados: jurados.map(j => `${j.nombre} | ${j.institucion} | ${j.correo}`).join("\n"),
         tipo_evaluacion:  form.tipo_evaluacion,
         id_programa:      programas.find(p => p.nombre === perfil?.programa)?.id ?? programas[0]?.id ?? 1,
         documento:        form.documento,
-      });
+      };
+      if (modoEdicion) {
+        await editarSolicitudEvaluacion(Number(idEditar), payload);
+        router.push("/dashboard/estudiante/solicitudes");
+        return;
+      }
+      const resultado = await crearSolicitudEvaluacion(payload);
       setRadicado(resultado.numero_radicado);
       setEnviado(true);
     } catch (err: unknown) {
@@ -238,8 +273,10 @@ export default function SolicitudEvaluacionPage() {
           <span>›</span>
           <span className="text-gray-700 font-medium">Solicitud de Evaluación</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">🔍 Solicitud de Evaluación</h1>
-        <p className="text-gray-500 mt-1">Revisa tu información y completa los campos requeridos.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{modoEdicion ? "✏️ Editar Solicitud de Evaluación" : "🔍 Solicitud de Evaluación"}</h1>
+        <p className="text-gray-500 mt-1">
+          {modoEdicion ? "Ajusta los datos de tu solicitud y guarda los cambios." : "Revisa tu información y completa los campos requeridos."}
+        </p>
       </div>
 
       {errorServidor && (
@@ -390,6 +427,12 @@ export default function SolicitudEvaluacionPage() {
             <span className="w-6 h-6 bg-green-700 text-white rounded-full flex items-center justify-center text-xs font-bold">4</span>
             <h2 className="text-base font-bold text-gray-700">Documento a Evaluar</h2>
           </div>
+          {documentoExistente && !nombreArchivo && (
+            <a href={`${API_URL}${documentoExistente}`} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm text-green-700 hover:underline">
+              📄 Ver documento actualmente adjunto
+            </a>
+          )}
           <div data-field="documento" tabIndex={-1} className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${errors.documento ? "border-red-300 bg-red-50" : nombreArchivo ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-green-400 hover:bg-green-50"}`}>
             {nombreArchivo ? (
               <div className="space-y-2">
@@ -428,12 +471,20 @@ export default function SolicitudEvaluacionPage() {
             className={`flex items-center gap-2 bg-green-700 text-white px-8 py-3 rounded-lg font-semibold text-sm transition-colors ${enviando ? "opacity-70 cursor-not-allowed" : "hover:bg-green-800"}`}
           >
             {enviando
-              ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Enviando...</>
-              : "Enviar Solicitud →"
+              ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> {modoEdicion ? "Guardando..." : "Enviando..."}</>
+              : (modoEdicion ? "Guardar cambios" : "Enviar Solicitud →")
             }
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function SolicitudEvaluacionPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>}>
+      <SolicitudEvaluacionForm />
+    </Suspense>
   );
 }

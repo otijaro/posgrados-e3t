@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getMisEstudiantes, darAvalReporte, ResumenDirector, EstudianteACargo } from "@/lib/api";
 import { getMe } from "@/lib/auth";
@@ -195,7 +196,8 @@ function TarjetaEstudiante({
               <p className="text-sm text-gray-400 text-center py-4">Sin solicitudes registradas</p>
             ) : (
               est.solicitudes.map((s) => (
-                <div key={s.id} className="flex items-center justify-between border border-gray-100 rounded-lg p-3">
+                <Link key={s.id} href={`/dashboard/director/solicitudes/${s.id}`}
+                  className="flex items-center justify-between border border-gray-100 rounded-lg p-3 hover:border-green-300 hover:bg-green-50 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{tipoSolicitudLabel(s.tipo_solicitud)}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{s.asunto}</p>
@@ -204,7 +206,7 @@ function TarjetaEstudiante({
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${estadoBadge(s.estado)}`}>
                     {estadoLabel(s.estado)}
                   </span>
-                </div>
+                </Link>
               ))
             )}
           </div>
@@ -319,13 +321,19 @@ export default function DashboardDirector() {
     <div className="p-6 max-w-5xl mx-auto">
 
       {/* Encabezado */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Bienvenido, {nombre || "..."}
-        </h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Panel de gestión — estudiantes a cargo
-        </p>
+      <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Bienvenido, {nombre || "..."}
+          </h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Panel de gestión — estudiantes a cargo
+          </p>
+        </div>
+        <Link href="/dashboard/director/historial"
+          className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 font-semibold text-sm">
+          📚 Historial de Solicitudes
+        </Link>
       </div>
 
       {/* Tarjetas resumen */}

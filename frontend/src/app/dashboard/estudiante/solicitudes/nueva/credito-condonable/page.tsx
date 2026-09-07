@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getMiPerfil, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
@@ -39,11 +40,19 @@ type FormErrors = {
 
 type CampoArchivo = "carta_director" | "certificado_notas" | "paz_salvo";
 
-export default function CreditoCondonablePage() {
+function CreditoCondonableForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const idEditar = searchParams.get("editar");
+  const modoEdicion = Boolean(idEditar);
+
   const [user, setUser]     = useState<UserInfo | null>(null);
   const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [docExistentes, setDocExistentes] = useState<Record<CampoArchivo, string | null>>({
+    carta_director: null, certificado_notas: null, paz_salvo: null,
+  });
 
   const [periodo, setPeriodo]               = useState(periodoActualSugerido());
   const [modalidad, setModalidad]           = useState("");
@@ -62,11 +71,25 @@ export default function CreditoCondonablePage() {
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil()])
-      .then(([u, p]) => { setUser(u); setPerfil(p); })
+    Promise.all([
+      getMe(), getMiPerfil(),
+      idEditar ? fetch(`${API_URL}/api/solicitudes/${idEditar}`).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
+    ])
+      .then(([u, p, solicitud]) => {
+        setUser(u); setPerfil(p);
+        if (solicitud && solicitud.datos_formulario) {
+          const d = solicitud.datos_formulario;
+          setPeriodo(d.periodo_completo ?? periodoActualSugerido());
+          setModalidad(d.modalidad ?? "");
+          setMateriaAsignada(d.materia_asignada ?? "");
+          setHorasSemanales(d.horas_semanales != null ? String(d.horas_semanales) : "");
+          setJustificacion(d.justificacion ?? "");
+          setDocExistentes({ carta_director: solicitud.documento ?? null, certificado_notas: null, paz_salvo: null });
+        }
+      })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [idEditar]);
 
   const esDocencia = modalidad === "Docencia Directa";
 
@@ -99,7 +122,8 @@ export default function CreditoCondonablePage() {
     if (!justificacion.trim())         e.justificacion = "La justificación es obligatoria.";
     else if (justificacion.trim().length < 30)
                                         e.justificacion = "La justificación debe tener al menos 30 caracteres.";
-    if (!archivos.carta_director)      e.carta_director = "Debes adjuntar la carta de aval del director.";
+    if (!archivos.carta_director && !(modoEdicion && docExistentes.carta_director))
+                                        e.carta_director = "Debes adjuntar la carta de aval del director.";
     return e;
   };
 
@@ -127,14 +151,21 @@ export default function CreditoCondonablePage() {
       if (archivos.certificado_notas) formData.append("certificado_notas", archivos.certificado_notas);
       if (archivos.paz_salvo)         formData.append("paz_salvo", archivos.paz_salvo);
 
-      const res = await fetch(`${API_URL}/api/solicitudes/credito-condonable`, {
-        method: "POST",
+      const url = modoEdicion
+        ? `${API_URL}/api/solicitudes/credito-condonable/${idEditar}/editar`
+        : `${API_URL}/api/solicitudes/credito-condonable`;
+      const res = await fetch(url, {
+        method: modoEdicion ? "PUT" : "POST",
         headers: authHeaders(),
         body: formData,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Error al enviar la solicitud.");
+      }
+      if (modoEdicion) {
+        router.push("/dashboard/estudiante/solicitudes");
+        return;
       }
       const resultado = await res.json();
       setRadicado(resultado.numero_radicado);
@@ -182,8 +213,14 @@ export default function CreditoCondonablePage() {
   const CampoArchivoUI = ({ campo, label, requerido }: { campo: CampoArchivo; label: string; requerido?: boolean }) => (
     <div data-field={campo} tabIndex={-1}>
       <p className="text-sm font-medium text-gray-700 mb-1.5">
-        {label} {requerido && <span className="text-red-500">*</span>}
+        {label} {requerido && !(modoEdicion && docExistentes[campo]) && <span className="text-red-500">*</span>}
       </p>
+      {docExistentes[campo] && !archivos[campo] && (
+        <a href={`${API_URL}${docExistentes[campo]}`} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-green-700 hover:underline mb-1.5">
+          📄 Ver actual
+        </a>
+      )}
       <div className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
         errors[campo] ? "border-red-300 bg-red-50"
         : archivos[campo] ? "border-green-400 bg-green-50"
@@ -223,8 +260,10 @@ export default function CreditoCondonablePage() {
           <span>›</span>
           <span className="text-gray-700 font-medium">Crédito Condonable</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">💰 Crédito Condonable</h1>
-        <p className="text-gray-500 mt-1">Solicita crédito condonable por docencia directa u otras modalidades, según el Acuerdo 350.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{modoEdicion ? "✏️ Editar Crédito Condonable" : "💰 Crédito Condonable"}</h1>
+        <p className="text-gray-500 mt-1">
+          {modoEdicion ? "Ajusta los datos de tu solicitud y guarda los cambios." : "Solicita crédito condonable por docencia directa u otras modalidades, según el Acuerdo 350."}
+        </p>
       </div>
 
       {errorServidor && (
@@ -377,12 +416,20 @@ export default function CreditoCondonablePage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                 </svg>
-                Enviando...
+                {modoEdicion ? "Guardando..." : "Enviando..."}
               </>
-            ) : "Enviar Solicitud →"}
+            ) : (modoEdicion ? "Guardar cambios" : "Enviar Solicitud →")}
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CreditoCondonablePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>}>
+      <CreditoCondonableForm />
+    </Suspense>
   );
 }

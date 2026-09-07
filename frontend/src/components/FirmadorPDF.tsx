@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -16,28 +16,116 @@ interface Props {
   soloVer?: boolean;
 }
 
-type FaseFirma = "ajustar" | "ubicar";
+// ─── Popup de dibujo a mano alzada ──────────────────────────────
+
+function PopupDibujarFirma({ onListo, onCerrar }: { onListo: (dataUrl: string) => void; onCerrar: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dibujando = useRef(false);
+  const [tieneTrazo, setTieneTrazo] = useState(false);
+
+  useEffect(() => {
+    const cvs = canvasRef.current;
+    if (!cvs) return;
+    const ctx = cvs.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#1e293b";
+  }, []);
+
+  function coordenadas(e: React.PointerEvent<HTMLCanvasElement>) {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * (canvasRef.current!.width / r.width),
+      y: (e.clientY - r.top) * (canvasRef.current!.height / r.height),
+    };
+  }
+
+  function iniciar(e: React.PointerEvent<HTMLCanvasElement>) {
+    dibujando.current = true;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const { x, y } = coordenadas(e);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  function mover(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!dibujando.current) return;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    const { x, y } = coordenadas(e);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setTieneTrazo(true);
+  }
+
+  function terminar() { dibujando.current = false; }
+
+  function limpiar() {
+    const cvs = canvasRef.current!;
+    const ctx = cvs.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, cvs.width, cvs.height);
+    setTieneTrazo(false);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-2xl p-5 max-w-lg w-full space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-gray-800">✏️ Dibuja tu firma</h3>
+          <button onClick={onCerrar} className="text-gray-400 hover:text-red-600 text-xl font-bold">✕</button>
+        </div>
+        <p className="text-xs text-gray-500">Usa el mouse (o el dedo en pantalla táctil) para dibujar tu firma abajo.</p>
+        <canvas
+          ref={canvasRef}
+          width={500} height={220}
+          className="w-full border-2 border-dashed border-gray-300 rounded-lg touch-none cursor-crosshair bg-white"
+          style={{ maxHeight: "260px" }}
+          onPointerDown={iniciar}
+          onPointerMove={mover}
+          onPointerUp={terminar}
+          onPointerLeave={terminar}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <button onClick={limpiar} className="text-sm text-gray-500 hover:text-red-600 font-medium">
+            🗑️ Limpiar
+          </button>
+          <button
+            onClick={() => tieneTrazo && onListo(canvasRef.current!.toDataURL("image/png"))}
+            disabled={!tieneTrazo}
+            className="bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            ✓ Usar esta firma
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Componente principal ───────────────────────────────────────
 
 export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
-  const canvasRef    = useRef<HTMLCanvasElement>(null);
-  const firmaPreview = useRef<HTMLCanvasElement>(null);
-  const renderTaskRef = useRef<any>(null); // ← para cancelar renders anteriores
+  const canvasRef     = useRef<HTMLCanvasElement>(null);
+  const contenedorRef = useRef<HTMLDivElement>(null);
+  const renderTaskRef = useRef<any>(null);
 
   const [pdfDoc, setPdfDoc]             = useState<any>(null);
   const [pagina, setPagina]             = useState(1);
   const [totalPag, setTotalPag]         = useState(1);
   const [escala, setEscala]             = useState(1.4);
-  const [pdfImageData, setPdfImageData] = useState<ImageData | null>(null);
 
-  const [firmaB64, setFirmaB64]         = useState<string | null>(null);
-  const [firmaImg, setFirmaImg]         = useState<HTMLImageElement | null>(null);
-  const [firmaW, setFirmaW]             = useState(0);
-  const [firmaH, setFirmaH]             = useState(0);
-  const [escalaFirma, setEscalaFirma]   = useState(1.0);
+  const [firmaB64, setFirmaB64]             = useState<string | null>(null); // PNG limpio (sin fondo), listo para incrustar en el PDF
+  const [firmaDataUrl, setFirmaDataUrl]     = useState<string | null>(null); // para mostrar en pantalla
   const [firmaPerfilUrl, setFirmaPerfilUrl] = useState<string | null>(null);
 
-  const [fase, setFase]             = useState<FaseFirma>("ajustar");
-  const [preview, setPreview]       = useState({ x: 0, y: 0, visible: false });
+  const [mostrarDibujo, setMostrarDibujo] = useState(false);
+
+  // Recuadro de firma superpuesto — coordenadas en px CSS relativas al contenedor
+  const [caja, setCaja] = useState({ x: 40, y: 40, w: 160, h: 70 });
+  const arrastre = useRef<{ modo: "mover" | "redimensionar"; inicioX: number; inicioY: number; caja0: typeof caja } | null>(null);
+
   const [procesando, setProcesando] = useState(false);
   const [firmado, setFirmado]       = useState(false);
 
@@ -76,13 +164,10 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
 
   async function renderPagina() {
     if (!pdfDoc || !canvasRef.current) return;
-
-    // Cancelar render anterior si existe
     if (renderTaskRef.current) {
       try { renderTaskRef.current.cancel(); } catch (_) {}
       renderTaskRef.current = null;
     }
-
     try {
       const page   = await pdfDoc.getPage(pagina);
       const vp     = page.getViewport({ scale: escala });
@@ -90,44 +175,14 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       const ctx    = canvas.getContext("2d")!;
       canvas.width  = vp.width;
       canvas.height = vp.height;
-
       const task = page.render({ canvasContext: ctx, viewport: vp });
       renderTaskRef.current = task;
       await task.promise;
       renderTaskRef.current = null;
-
-      setPdfImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
     } catch (e: any) {
-      // Ignorar errores de cancelación
-      if (e?.name !== "RenderingCancelledException") {
-        console.error("Error renderizando PDF:", e);
-      }
+      if (e?.name !== "RenderingCancelledException") console.error("Error renderizando PDF:", e);
     }
   }
-
-  useEffect(() => {
-    if (!canvasRef.current || !pdfImageData) return;
-    const ctx = canvasRef.current.getContext("2d")!;
-    ctx.putImageData(pdfImageData, 0, 0);
-    if (fase === "ubicar" && preview.visible && firmaImg) {
-      const w = firmaW * escalaFirma;
-      const h = firmaH * escalaFirma;
-      ctx.globalAlpha = 0.6;
-      ctx.drawImage(firmaImg, preview.x - w/2, preview.y - h/2, w, h);
-      ctx.globalAlpha = 1;
-    }
-  }, [preview, firmaImg, escalaFirma, pdfImageData, fase]);
-
-  useEffect(() => {
-    if (!firmaPreview.current || !firmaImg) return;
-    const cvs   = firmaPreview.current;
-    const ratio = Math.min(260 / firmaW, 100 / firmaH);
-    cvs.width   = firmaW * ratio * escalaFirma;
-    cvs.height  = firmaH * ratio * escalaFirma;
-    const ctx   = cvs.getContext("2d")!;
-    ctx.clearRect(0, 0, cvs.width, cvs.height);
-    ctx.drawImage(firmaImg, 0, 0, cvs.width, cvs.height);
-  }, [firmaImg, escalaFirma, firmaW, firmaH]);
 
   function b64ToArr(b64: string): Uint8Array {
     const bin = atob(b64);
@@ -150,6 +205,7 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
     });
   }
 
+  // Quita el fondo blanco de la imagen de firma y la deja lista para incrustar
   function procesarFirma(dataUrl: string) {
     const img = new Image();
     img.src = dataUrl;
@@ -165,11 +221,16 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       ctx.putImageData(data, 0, 0);
       const clean = tmp.toDataURL("image/png");
       setFirmaB64(clean.split(",")[1]);
-      setFirmaW(img.width); setFirmaH(img.height);
-      setEscalaFirma(1.0);
-      const imgEl = new Image();
-      imgEl.src = clean;
-      imgEl.onload = () => { setFirmaImg(imgEl); setFase("ajustar"); setFirmado(false); };
+      setFirmaDataUrl(clean);
+
+      // Recuadro inicial: tamaño proporcional a la firma, centrado
+      const cvs = canvasRef.current;
+      const anchoDisponible = cvs ? cvs.getBoundingClientRect().width : 400;
+      const w = Math.min(200, anchoDisponible * 0.35);
+      const h = w * (img.height / img.width);
+      setCaja({ x: 40, y: 40, w, h });
+      setFirmado(false);
+      setMostrarDibujo(false);
     };
   }
 
@@ -182,7 +243,7 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
   function cargarFirmaPerfil(url: string) {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = url + "?t=" + Date.now(); // evitar caché
+    img.src = url + "?t=" + Date.now();
     img.onload = () => {
       const tmp = document.createElement("canvas");
       tmp.width = img.width; tmp.height = img.height;
@@ -190,7 +251,6 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       procesarFirma(tmp.toDataURL("image/png"));
     };
     img.onerror = () => {
-      // Si falla por CORS, intentar fetch
       fetch(url)
         .then(r => r.blob())
         .then(blob => {
@@ -211,13 +271,42 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       .catch(() => {});
   }
 
+  // ── Arrastrar / redimensionar el recuadro ──────────────────────
+
+  const handlePointerDownMover = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    arrastre.current = { modo: "mover", inicioX: e.clientX, inicioY: e.clientY, caja0: caja };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [caja]);
+
+  const handlePointerDownRedimensionar = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    arrastre.current = { modo: "redimensionar", inicioX: e.clientX, inicioY: e.clientY, caja0: caja };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [caja]);
+
+  const handlePointerMoveGlobal = useCallback((e: React.PointerEvent) => {
+    if (!arrastre.current) return;
+    const dx = e.clientX - arrastre.current.inicioX;
+    const dy = e.clientY - arrastre.current.inicioY;
+    const c0 = arrastre.current.caja0;
+
+    if (arrastre.current.modo === "mover") {
+      setCaja({ ...c0, x: c0.x + dx, y: c0.y + dy });
+    } else {
+      setCaja({ ...c0, w: Math.max(30, c0.w + dx), h: Math.max(20, c0.h + dy) });
+    }
+  }, []);
+
+  const handlePointerUpGlobal = useCallback(() => { arrastre.current = null; }, []);
+
   function reiniciarFirma() {
     setFirmado(false);
-    setFase("ajustar");
-    renderPagina();
+    setFirmaB64(null);
+    setFirmaDataUrl(null);
   }
 
-  async function firmar(x: number, y: number) {
+  async function confirmarFirma() {
     if (!firmaB64 || !canvasRef.current) return;
     setProcesando(true);
     try {
@@ -228,13 +317,20 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       const firmaBytes = b64ToArr(firmaB64);
       const firmaEmbed = await doc.embedPng(firmaBytes);
       const canvas     = canvasRef.current;
+      const rectCanvas = canvas.getBoundingClientRect();
       const page       = doc.getPages()[pagina - 1];
       const { width, height } = page.getSize();
-      const pdfX = (x / canvas.width)  * width;
-      const pdfY = height - (y / canvas.height) * height;
-      const w    = firmaW * escalaFirma * (width  / canvas.width);
-      const h    = firmaH * escalaFirma * (height / canvas.height);
-      page.drawImage(firmaEmbed, { x: pdfX - w/2, y: pdfY - h/2, width: w, height: h });
+
+      // Convertir coordenadas del recuadro (CSS, relativas al canvas mostrado)
+      // a coordenadas reales del PDF.
+      const ratioX = width  / rectCanvas.width;
+      const ratioY = height / rectCanvas.height;
+      const pdfX = caja.x * ratioX;
+      const pdfW = caja.w * ratioX;
+      const pdfH = caja.h * ratioY;
+      const pdfY = height - (caja.y * ratioY) - pdfH;
+
+      page.drawImage(firmaEmbed, { x: pdfX, y: pdfY, width: pdfW, height: pdfH });
       const saved = await doc.save();
       setFirmado(true);
       onFirmado(arrToB64(new Uint8Array(saved)));
@@ -248,25 +344,18 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex flex-col">
 
+      {mostrarDibujo && (
+        <PopupDibujarFirma
+          onListo={(dataUrl) => procesarFirma(dataUrl)}
+          onCerrar={() => setMostrarDibujo(false)}
+        />
+      )}
+
       {/* Barra superior */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-3 flex-wrap">
         <h2 className="font-bold text-gray-800 text-sm">
-          {firmado ? "✅ Firma colocada" : fase === "ajustar" ? "🔧 Ajustar tamaño de la firma" : "📍 Ubicar firma en el documento"}
+          {firmado ? "✅ Firma colocada" : firmaDataUrl ? "📍 Ubica y ajusta tu firma sobre el documento" : "✍️ Elige cómo firmar"}
         </h2>
-
-        <div className="flex items-center gap-1 text-xs ml-2">
-          {[{ key: "ajustar", label: "1. Ajustar" }, { key: "ubicar", label: "2. Firmar" }].map((paso, i) => (
-            <span key={paso.key} className="flex items-center gap-1">
-              {i > 0 && <span className="text-gray-300">›</span>}
-              <span className={`px-2 py-0.5 rounded-full font-medium ${
-                firmado ? "bg-green-100 text-green-700" :
-                fase === paso.key ? "bg-green-700 text-white" :
-                (fase === "ubicar" && paso.key === "ajustar") ? "bg-green-100 text-green-700" :
-                "bg-gray-100 text-gray-400"
-              }`}>{paso.label}</span>
-            </span>
-          ))}
-        </div>
 
         <div className="flex items-center gap-2 text-xs text-gray-600 ml-auto">
           <button onClick={() => setPagina(p => Math.max(1, p-1))} className="px-2 py-1 bg-gray-100 rounded hover:bg-gray-200">◀</button>
@@ -296,80 +385,76 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
         </div>
       )}
 
-      {/* Fase 1: Ajustar */}
-      {!firmado && fase === "ajustar" && (
-        <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center gap-6 flex-wrap">
-          <div className="flex items-center gap-2">
-            <label className="cursor-pointer bg-green-700 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-green-800">
-              📎 {firmaImg ? "Cambiar firma" : "Subir imagen de firma"}
-              <input type="file" accept=".png,.jpg,.jpeg" className="hidden"
-                onChange={e => { const f = e.target.files?.[0]; if (f) { cargarFirmaArchivo(f); guardarFirmaEnPerfil(f); } }} />
-            </label>
-            {firmaPerfilUrl && (
-              <button onClick={() => cargarFirmaPerfil(firmaPerfilUrl)}
-                className="bg-blue-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center gap-1">
-                👤 Usar guardada
-                <img src={firmaPerfilUrl} className="h-5 ml-1 border rounded bg-white" alt="firma" />
-              </button>
-            )}
-          </div>
-          {firmaImg && (
-            <>
-              <div className="flex items-center gap-3 border-l pl-4">
-                <span className="text-xs text-gray-500 font-medium">Tamaño:</span>
-                <button onClick={() => setEscalaFirma(e => Math.max(0.1, +(e-0.1).toFixed(1)))}
-                  className="w-7 h-7 bg-gray-100 rounded-full font-bold hover:bg-gray-200 flex items-center justify-center">−</button>
-                <input type="range" min={0.1} max={3} step={0.05} value={escalaFirma}
-                  onChange={e => setEscalaFirma(parseFloat(e.target.value))} className="w-28" />
-                <button onClick={() => setEscalaFirma(e => Math.min(3, +(e+0.1).toFixed(1)))}
-                  className="w-7 h-7 bg-gray-100 rounded-full font-bold hover:bg-gray-200 flex items-center justify-center">+</button>
-                <span className="text-xs font-mono text-gray-600 w-10">{Math.round(escalaFirma*100)}%</span>
-              </div>
-              <div className="flex items-center gap-3 border-l pl-4">
-                <span className="text-xs text-gray-500 font-medium">Vista previa:</span>
-                <div className="border border-gray-200 rounded bg-gray-50 p-1 min-w-[80px] min-h-[40px] flex items-center justify-center">
-                  <canvas ref={firmaPreview} className="max-w-[260px] max-h-[100px]" />
-                </div>
-              </div>
-              <button onClick={() => setFase("ubicar")}
-                className="ml-auto bg-green-700 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-green-800">
-                Listo, ubicar firma →
-              </button>
-            </>
+      {/* Selector inicial: subir o dibujar */}
+      {!firmado && !firmaDataUrl && (
+        <div className="bg-white border-b border-gray-200 px-4 py-4 flex items-center gap-4 flex-wrap justify-center">
+          <label className="cursor-pointer flex items-center gap-2 bg-green-700 text-white px-5 py-3 rounded-xl font-semibold text-sm hover:bg-green-800">
+            📁 Subir imagen de firma
+            <input type="file" accept=".png,.jpg,.jpeg" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) { cargarFirmaArchivo(f); guardarFirmaEnPerfil(f); } }} />
+          </label>
+          <button onClick={() => setMostrarDibujo(true)}
+            className="flex items-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-xl font-semibold text-sm hover:bg-blue-700">
+            ✏️ Dibujar mi firma
+          </button>
+          {firmaPerfilUrl && (
+            <button onClick={() => cargarFirmaPerfil(firmaPerfilUrl)}
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-3 rounded-xl text-sm hover:bg-gray-50">
+              👤 Usar mi firma guardada
+              <img src={firmaPerfilUrl} className="h-6 border rounded bg-white" alt="firma guardada" />
+            </button>
           )}
-          {!firmaImg && <span className="text-xs text-gray-400 italic">Sube una imagen para ajustar su tamaño</span>}
         </div>
       )}
 
-      {/* Fase 2: Ubicar */}
-      {!firmado && fase === "ubicar" && (
+      {/* Instrucciones cuando ya hay firma para ubicar */}
+      {!firmado && firmaDataUrl && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-xs text-amber-700 text-center flex items-center justify-center gap-4">
-          <span>🖱️ Mueve el mouse para ver la firma · <strong>Haz clic</strong> para colocarla</span>
-          <button onClick={() => setFase("ajustar")} className="text-amber-700 underline hover:text-amber-900">
-            ← Volver a ajustar
+          <span>🖱️ Arrastra el recuadro para moverlo · arrastra la esquina ↘️ para cambiar el tamaño</span>
+          <button onClick={reiniciarFirma} className="text-amber-700 underline hover:text-amber-900">
+            ← Elegir otra firma
           </button>
         </div>
       )}
 
-      {/* Canvas */}
+      {/* Canvas + recuadro superpuesto */}
       <div className="flex-1 overflow-auto flex items-start justify-center p-4 bg-gray-700 relative">
-        <canvas
-          ref={canvasRef}
-          className={`shadow-2xl ${!firmado && fase === "ubicar" && firmaImg ? "cursor-crosshair" : "cursor-default"}`}
-          style={{ maxWidth: "100%" }}
-          onMouseMove={e => {
-            if (firmado || fase !== "ubicar" || !firmaImg) return;
-            const r = canvasRef.current!.getBoundingClientRect();
-            setPreview({ x: (e.clientX-r.left)*canvasRef.current!.width/r.width, y: (e.clientY-r.top)*canvasRef.current!.height/r.height, visible: true });
-          }}
-          onMouseLeave={() => setPreview(p => ({ ...p, visible: false }))}
-          onClick={e => {
-            if (firmado || fase !== "ubicar" || !firmaImg) return;
-            const r = canvasRef.current!.getBoundingClientRect();
-            firmar((e.clientX-r.left)*canvasRef.current!.width/r.width, (e.clientY-r.top)*canvasRef.current!.height/r.height);
-          }}
-          onWheel={e => { e.preventDefault(); setEscala(s => Math.min(4, Math.max(0.5, s+(e.deltaY<0?0.2:-0.2)))); }}
-        />
+        <div ref={contenedorRef} style={{ position: "relative", display: "inline-block" }}>
+          <canvas ref={canvasRef} className="shadow-2xl block" style={{ maxWidth: "100%" }} />
+
+          {!firmado && firmaDataUrl && (
+            <div
+              onPointerDown={handlePointerDownMover}
+              onPointerMove={handlePointerMoveGlobal}
+              onPointerUp={handlePointerUpGlobal}
+              style={{
+                position: "absolute",
+                left: caja.x, top: caja.y, width: caja.w, height: caja.h,
+                border: "2px dashed #16a34a",
+                background: "rgba(22,163,74,0.05)",
+                cursor: "move",
+                touchAction: "none",
+              }}
+            >
+              <img src={firmaDataUrl} draggable={false}
+                style={{ width: "100%", height: "100%", objectFit: "contain", pointerEvents: "none" }} alt="firma" />
+
+              {/* Manija de redimensionar, esquina inferior derecha */}
+              <div
+                onPointerDown={handlePointerDownRedimensionar}
+                onPointerMove={handlePointerMoveGlobal}
+                onPointerUp={handlePointerUpGlobal}
+                style={{
+                  position: "absolute", right: -8, bottom: -8,
+                  width: 16, height: 16, borderRadius: "50%",
+                  background: "#16a34a", border: "2px solid white",
+                  cursor: "nwse-resize", touchAction: "none",
+                }}
+              />
+            </div>
+          )}
+        </div>
+
         {procesando && (
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
             <div className="bg-white rounded-xl p-6 text-center">
@@ -379,6 +464,16 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
           </div>
         )}
       </div>
+
+      {/* Botón confirmar, fijo abajo mientras se está ubicando */}
+      {!firmado && firmaDataUrl && (
+        <div className="bg-white border-t border-gray-200 px-4 py-3 flex justify-center">
+          <button onClick={confirmarFirma} disabled={procesando}
+            className="bg-green-700 text-white px-8 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-800 disabled:opacity-60">
+            ✓ Confirmar firma aquí
+          </button>
+        </div>
+      )}
     </div>
   );
 }
