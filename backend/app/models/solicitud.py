@@ -87,6 +87,10 @@ class Solicitud(Base):
     
     # Documentos adjuntos (URLs o JSON con lista de archivos)
     documentos_adjuntos = Column(Text)  # JSON: [{"nombre": "...", "url": "..."}]
+
+    # Datos originales del formulario específico (JSON), para poder reabrir
+    # el mismo formulario de creación precargado al editar la solicitud.
+    datos_formulario = Column(Text, nullable=True)
     
     # Estado y flujo
     estado = Column(SQLEnum(EstadoSolicitud), default=EstadoSolicitud.BORRADOR)

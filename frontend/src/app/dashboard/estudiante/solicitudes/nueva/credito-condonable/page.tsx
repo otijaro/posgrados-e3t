@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { getMiPerfil, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
 
@@ -39,11 +40,19 @@ type FormErrors = {
 
 type CampoArchivo = "carta_director" | "certificado_notas" | "paz_salvo";
 
-export default function CreditoCondonablePage() {
+function CreditoCondonableForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const idEditar = searchParams.get("editar");
+  const modoEdicion = Boolean(idEditar);
+
   const [user, setUser]     = useState<UserInfo | null>(null);
   const [perfil, setPerfil] = useState<EstudianteInfo | null>(null);
   const [cargando, setCargando]     = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [docExistentes, setDocExistentes] = useState<Record<CampoArchivo, string | null>>({
+    carta_director: null, certificado_notas: null, paz_salvo: null,
+  });
 
   const [periodo, setPeriodo]               = useState(periodoActualSugerido());
   const [modalidad, setModalidad]           = useState("");
@@ -62,11 +71,25 @@ export default function CreditoCondonablePage() {
   const [errorServidor, setErrorServidor] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getMe(), getMiPerfil()])
-      .then(([u, p]) => { setUser(u); setPerfil(p); })
+    Promise.all([
+      getMe(), getMiPerfil(),
+      idEditar ? fetch(`${API_URL}/api/solicitudes/${idEditar}`).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
+    ])
+      .then(([u, p, solicitud]) => {
+        setUser(u); setPerfil(p);
+        if (solicitud && solicitud.datos_formulario) {
+          const d = solicitud.datos_formulario;
+          setPeriodo(d.periodo_completo ?? periodoActualSugerido());
+          setModalidad(d.modalidad ?? "");
+          setMateriaAsignada(d.materia_asignada ?? "");
+          setHorasSemanales(d.horas_semanales != null ? String(d.horas_semanales) : "");
+          setJustificacion(d.justificacion ?? "");
+          setDocExistentes({ carta_director: solicitud.documento ?? null, certificado_notas: null, paz_salvo: null });
+        }
+      })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [idEditar]);
 
   const esDocencia = modalidad === "Docencia Directa";
 
@@ -83,7 +106,12 @@ export default function CreditoCondonablePage() {
     setErrors(p => ({ ...p, [campo]: undefined }));
   }
 
-  const validar = (): boolean => {
+  const ORDEN_CAMPOS = [
+    "periodo", "modalidad", "materia_asignada", "horas_semanales",
+    "justificacion", "carta_director",
+  ];
+
+  const validar = (): FormErrors => {
     const e: FormErrors = {};
     if (!/^\d{4}-[12]$/.test(periodo)) e.periodo = "Formato esperado: AAAA-1 o AAAA-2 (ej. 2026-2).";
     if (!modalidad)                    e.modalidad = "Selecciona la modalidad.";
@@ -94,13 +122,22 @@ export default function CreditoCondonablePage() {
     if (!justificacion.trim())         e.justificacion = "La justificación es obligatoria.";
     else if (justificacion.trim().length < 30)
                                         e.justificacion = "La justificación debe tener al menos 30 caracteres.";
-    if (!archivos.carta_director)      e.carta_director = "Debes adjuntar la carta de aval del director.";
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    if (!archivos.carta_director && !(modoEdicion && docExistentes.carta_director))
+                                        e.carta_director = "Debes adjuntar la carta de aval del director.";
+    return e;
+  };
+
+  const irAlPrimerError = (e: FormErrors) => {
+    const primerCampo = ORDEN_CAMPOS.find((campo) => e[campo as keyof FormErrors]);
+    if (!primerCampo) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${primerCampo}"]`);
+    if (el) { el.scrollIntoView({ behavior: "smooth", block: "center" }); el.focus({ preventScroll: true }); }
   };
 
   const handleSubmit = async () => {
-    if (!validar()) return;
+    const e = validar();
+    setErrors(e);
+    if (Object.keys(e).length > 0) { irAlPrimerError(e); return; }
     setEnviando(true);
     setErrorServidor(null);
     try {
@@ -114,14 +151,21 @@ export default function CreditoCondonablePage() {
       if (archivos.certificado_notas) formData.append("certificado_notas", archivos.certificado_notas);
       if (archivos.paz_salvo)         formData.append("paz_salvo", archivos.paz_salvo);
 
-      const res = await fetch(`${API_URL}/api/solicitudes/credito-condonable`, {
-        method: "POST",
+      const url = modoEdicion
+        ? `${API_URL}/api/solicitudes/credito-condonable/${idEditar}/editar`
+        : `${API_URL}/api/solicitudes/credito-condonable`;
+      const res = await fetch(url, {
+        method: modoEdicion ? "PUT" : "POST",
         headers: authHeaders(),
         body: formData,
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Error al enviar la solicitud.");
+      }
+      if (modoEdicion) {
+        router.push("/dashboard/estudiante/solicitudes");
+        return;
       }
       const resultado = await res.json();
       setRadicado(resultado.numero_radicado);
@@ -167,10 +211,16 @@ export default function CreditoCondonablePage() {
   );
 
   const CampoArchivoUI = ({ campo, label, requerido }: { campo: CampoArchivo; label: string; requerido?: boolean }) => (
-    <div>
+    <div data-field={campo} tabIndex={-1}>
       <p className="text-sm font-medium text-gray-700 mb-1.5">
-        {label} {requerido && <span className="text-red-500">*</span>}
+        {label} {requerido && !(modoEdicion && docExistentes[campo]) && <span className="text-red-500">*</span>}
       </p>
+      {docExistentes[campo] && !archivos[campo] && (
+        <a href={`${API_URL}${docExistentes[campo]}`} target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-green-700 hover:underline mb-1.5">
+          📄 Ver actual
+        </a>
+      )}
       <div className={`border-2 border-dashed rounded-xl p-5 text-center transition-colors ${
         errors[campo] ? "border-red-300 bg-red-50"
         : archivos[campo] ? "border-green-400 bg-green-50"
@@ -210,8 +260,10 @@ export default function CreditoCondonablePage() {
           <span>›</span>
           <span className="text-gray-700 font-medium">Crédito Condonable</span>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800">💰 Crédito Condonable</h1>
-        <p className="text-gray-500 mt-1">Solicita crédito condonable por docencia directa u otras modalidades, según el Acuerdo 350.</p>
+        <h1 className="text-2xl font-bold text-gray-800">{modoEdicion ? "✏️ Editar Crédito Condonable" : "💰 Crédito Condonable"}</h1>
+        <p className="text-gray-500 mt-1">
+          {modoEdicion ? "Ajusta los datos de tu solicitud y guarda los cambios." : "Solicita crédito condonable por docencia directa u otras modalidades, según el Acuerdo 350."}
+        </p>
       </div>
 
       {errorServidor && (
@@ -253,6 +305,7 @@ export default function CreditoCondonablePage() {
               <input
                 type="text"
                 value={periodo}
+                data-field="periodo"
                 onChange={(e) => { setPeriodo(e.target.value); setErrors(p => ({ ...p, periodo: undefined })); }}
                 placeholder="2026-2"
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.periodo ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -265,6 +318,7 @@ export default function CreditoCondonablePage() {
               </label>
               <select
                 value={modalidad}
+                data-field="modalidad"
                 onChange={(e) => { setModalidad(e.target.value); setErrors(p => ({ ...p, modalidad: undefined })); }}
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.modalidad ? "border-red-400 bg-red-50" : "border-gray-200"}`}
               >
@@ -284,6 +338,7 @@ export default function CreditoCondonablePage() {
                 <input
                   type="text"
                   value={materiaAsignada}
+                  data-field="materia_asignada"
                   onChange={(e) => { setMateriaAsignada(e.target.value); setErrors(p => ({ ...p, materia_asignada: undefined })); }}
                   placeholder="Nombre de la materia"
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.materia_asignada ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -298,6 +353,7 @@ export default function CreditoCondonablePage() {
                   type="number"
                   min={1}
                   value={horasSemanales}
+                  data-field="horas_semanales"
                   onChange={(e) => { setHorasSemanales(e.target.value); setErrors(p => ({ ...p, horas_semanales: undefined })); }}
                   placeholder="4"
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.horas_semanales ? "border-red-400 bg-red-50" : "border-gray-200"}`}
@@ -316,6 +372,7 @@ export default function CreditoCondonablePage() {
           </div>
           <textarea
             value={justificacion}
+            data-field="justificacion"
             onChange={(e) => { setJustificacion(e.target.value); setErrors(p => ({ ...p, justificacion: undefined })); }}
             rows={4}
             placeholder="Explica los motivos de tu solicitud de crédito condonable (mínimo 30 caracteres)."
@@ -359,12 +416,20 @@ export default function CreditoCondonablePage() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                 </svg>
-                Enviando...
+                {modoEdicion ? "Guardando..." : "Enviando..."}
               </>
-            ) : "Enviar Solicitud →"}
+            ) : (modoEdicion ? "Guardar cambios" : "Enviar Solicitud →")}
           </button>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CreditoCondonablePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>}>
+      <CreditoCondonableForm />
+    </Suspense>
   );
 }

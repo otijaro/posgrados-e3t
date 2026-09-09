@@ -11,13 +11,17 @@ from app.models import Persona, CatalogoRol, VinculacionActiva
 from app.services.auth import hash_password
 from sqlalchemy import or_
 
+EMAIL_COORDINADOR = "e3t.coord.posgrado@uis.edu.co"
+
 db = SessionLocal()
 
 try:
     # 1. Buscar o crear el coordinador
     coordinador = db.query(Persona).filter(
         or_(
+            Persona.email_institucional == EMAIL_COORDINADOR,
             Persona.email_institucional == "ojtijaro@uis.edu.co",
+            Persona.email_institucional == "omar.tijaro@uis.edu.co",
             Persona.nombre_completo.ilike("%tijaro%"),
             Persona.nombre_completo.ilike("%tíjaro%"),
         )
@@ -25,7 +29,7 @@ try:
 
     if not coordinador:
         coordinador = Persona(
-            email_institucional="omar.tijaro@uis.edu.co",
+            email_institucional=EMAIL_COORDINADOR,
             nombre_completo="Omar Javier Tíjaro Rojas",
             hashed_password=hash_password("coordinador123"),
         )
@@ -34,8 +38,7 @@ try:
         print(f"✅ Coordinador creado: {coordinador.nombre_completo} (id={coordinador.id})")
     else:
         coordinador.hashed_password = hash_password("coordinador123")
-        if not coordinador.email_institucional or "@" not in (coordinador.email_institucional or ""):
-            coordinador.email_institucional = "omar.tijaro@uis.edu.co"
+        coordinador.email_institucional = EMAIL_COORDINADOR
         print(f"✅ Coordinador encontrado: {coordinador.nombre_completo} (id={coordinador.id})")
         print(f"   📧 Email: {coordinador.email_institucional}")
 

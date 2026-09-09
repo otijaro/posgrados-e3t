@@ -50,14 +50,39 @@ export default function SolicitudesPage() {
   const [cargando, setCargando]       = useState(true);
   const [error, setError]             = useState<string | null>(null);
   const [expandida, setExpandida]     = useState<number | null>(null);
+  const [cancelando, setCancelando]   = useState<number | null>(null);
+  const [confirmarCancelar, setConfirmarCancelar] = useState<number | null>(null);
 
-  useEffect(() => {
+  const cargar = () => {
+    setCargando(true);
     fetch(`${API_URL}/api/solicitudes/mis-solicitudes`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(data => setSolicitudes(Array.isArray(data) ? data : []))
       .catch(() => setError("No se pudieron cargar las solicitudes."))
       .finally(() => setCargando(false));
-  }, []);
+  };
+
+  useEffect(() => { cargar(); }, []);
+
+  const handleCancelar = async (id: number) => {
+    setCancelando(id);
+    setConfirmarCancelar(null);
+    try {
+      const res = await fetch(`${API_URL}/api/solicitudes/${id}/cancelar`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "No se pudo cancelar la solicitud.");
+      }
+      cargar();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error al cancelar la solicitud.");
+    } finally {
+      setCancelando(null);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -143,39 +168,70 @@ export default function SolicitudesPage() {
                     )}
 
                     {/* Estado del flujo */}
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span className="font-medium">Flujo:</span>
-                      {["enviada", "en_revision", "en_comite", "aprobada"].map((paso, i) => {
-                        const estados = ["enviada", "en_revision", "en_comite", "aprobada"];
-                        const idx = estados.indexOf(s.estado);
-                        const rechazada = s.estado === "rechazada";
-                        return (
-                          <span key={paso} className="flex items-center gap-1">
-                            {i > 0 && <span className="text-gray-300">›</span>}
-                            <span className={`px-2 py-0.5 rounded-full font-medium ${
-                              rechazada && i === idx ? "bg-red-100 text-red-600" :
-                              i <= idx ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
-                            }`}>
-                              {["Enviada", "Director", "Coordinador", "Aprobada"][i]}
+                    {["enviada", "en_revision", "en_comite", "aprobada"].includes(s.estado) ? (
+                      <div className="flex items-center gap-2 text-xs text-gray-500">
+                        <span className="font-medium">Flujo:</span>
+                        {["enviada", "en_revision", "en_comite", "aprobada"].map((paso, i) => {
+                          const estados = ["enviada", "en_revision", "en_comite", "aprobada"];
+                          const idx = estados.indexOf(s.estado);
+                          return (
+                            <span key={paso} className="flex items-center gap-1">
+                              {i > 0 && <span className="text-gray-300">›</span>}
+                              <span className={`px-2 py-0.5 rounded-full font-medium ${
+                                i <= idx ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                              }`}>
+                                {["Enviada", "Director", "Coordinador", "Aprobada"][i]}
+                              </span>
                             </span>
-                          </span>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-medium text-gray-500">Flujo:</span>
+                        <span className={`px-2 py-0.5 rounded-full font-medium ${estadoColor[s.estado] ?? "bg-gray-100 text-gray-600"}`}>
+                          {s.estado === "rechazada" ? "❌ Rechazada en el proceso" : estadoLabel[s.estado] ?? s.estado}
+                        </span>
+                      </div>
+                    )}
 
-                    {/* Botón editar */}
+                    {/* Botones editar / cancelar */}
                     {s.editable ? (
-                      <div className="flex items-center gap-3">
-                        <Link
-                          href={`/dashboard/estudiante/solicitudes/editar/${s.id}`}
-                          className="flex items-center gap-2 bg-amber-500 text-white text-sm px-4 py-2 rounded-lg hover:bg-amber-600 font-semibold">
-                          ✏️ Editar solicitud
-                        </Link>
-                        <p className="text-xs text-gray-400">
-                          {s.horas_restantes !== undefined
-                            ? `Tienes ${s.horas_restantes}h para editar antes de que el director la revise`
-                            : "Editable mientras el director no la haya revisado"}
-                        </p>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <Link
+                            href={`/dashboard/estudiante/solicitudes/editar/${s.id}`}
+                            className="flex items-center gap-2 bg-amber-500 text-white text-sm px-4 py-2 rounded-lg hover:bg-amber-600 font-semibold">
+                            ✏️ Editar solicitud
+                          </Link>
+                          <button
+                            onClick={() => setConfirmarCancelar(s.id)}
+                            disabled={cancelando === s.id}
+                            className="flex items-center gap-2 border border-red-300 text-red-600 text-sm px-4 py-2 rounded-lg hover:bg-red-50 font-semibold disabled:opacity-60">
+                            {cancelando === s.id ? "Cancelando..." : "🚫 Cancelar solicitud"}
+                          </button>
+                          <p className="text-xs text-gray-400">
+                            {s.horas_restantes !== undefined
+                              ? `Tienes ${s.horas_restantes}h para editar o cancelar antes de que el director la revise`
+                              : "Editable mientras el director no la haya revisado"}
+                          </p>
+                        </div>
+
+                        {confirmarCancelar === s.id && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between gap-3">
+                            <p className="text-xs text-red-700">¿Seguro que quieres cancelar esta solicitud? No podrás deshacer esto.</p>
+                            <div className="flex gap-2 flex-shrink-0">
+                              <button onClick={() => setConfirmarCancelar(null)}
+                                className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg border border-gray-200">
+                                No
+                              </button>
+                              <button onClick={() => handleCancelar(s.id)}
+                                className="text-xs bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 font-semibold">
+                                Sí, cancelar
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : s.motivo_no_editable ? (
                       <p className="text-xs text-gray-400 italic">🔒 {s.motivo_no_editable}</p>

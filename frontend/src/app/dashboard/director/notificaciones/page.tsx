@@ -64,7 +64,7 @@ export default function NotificacionesDirector() {
                 codigo: est.codigo_estudiante,
                 descripcion: `${tipoLabel[s.tipo_solicitud] || "Solicitud"} pendiente de revisión`,
                 detalle: s.asunto,
-                href: "/dashboard/director",
+                href: "/dashboard/director/solicitudes",
               });
             }
           });

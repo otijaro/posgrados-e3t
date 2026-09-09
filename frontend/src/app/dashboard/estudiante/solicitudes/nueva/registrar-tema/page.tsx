@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, memo, useRef } from "react";
+import { useState, useEffect, useCallback, memo, useRef, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { getMiPerfil, EstudianteInfo } from "@/lib/api";
 import { getMe, UserInfo } from "@/lib/auth";
@@ -9,7 +10,6 @@ import { getMe, UserInfo } from "@/lib/auth";
 const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
-const LINK_LINEA = "https://www.uis.edu.co/webUIS/es/academia/facultades/fisicoMecanicas/escuelas/e3t/nuestraEscuela/trabajoGrado.html";
 
 function authHeaders(): Record<string, string> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -48,6 +48,7 @@ const CampoPersona = memo(({
           Nombre completo {!opcionalLabel && <span className="text-red-500">*</span>}
         </label>
         <input type="text" value={nombre} onChange={e => onNombre(e.target.value)}
+          data-field="director_nombre"
           placeholder="Ej. Juan Manuel Rey López"
           className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorNombre ? "border-red-400" : "border-gray-200"}`} />
         {errorNombre && <p className="text-red-500 text-xs mt-0.5">{errorNombre}</p>}
@@ -57,6 +58,7 @@ const CampoPersona = memo(({
           Correo institucional {!opcionalLabel && <span className="text-red-500">*</span>}
         </label>
         <input type="email" value={correo} onChange={e => onCorreo(e.target.value)}
+          data-field="director_correo"
           placeholder="Ej. juan.rey@uis.edu.co"
           className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errorCorreo ? "border-red-400" : "border-gray-200"}`} />
         {errorCorreo && <p className="text-red-500 text-xs mt-0.5">{errorCorreo}</p>}
@@ -66,12 +68,19 @@ const CampoPersona = memo(({
 ));
 CampoPersona.displayName = "CampoPersona";
 
-export default function RegistrarTemaPage() {
+function RegistrarTemaForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const idEditar = searchParams.get("editar");
+  const modoEdicion = Boolean(idEditar);
+
   const [user, setUser]         = useState<UserInfo | null>(null);
   const [perfil, setPerfil]     = useState<EstudianteInfo | null>(null);
   const [grupos, setGrupos]     = useState<GrupoInv[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [documentoExistente, setDocumentoExistente] = useState<string | null>(null);
+  const [temaActivo, setTemaActivo] = useState<{ id: number; numero_radicado: string; estado: string; editable: boolean } | null>(null);
 
   const [dirNombre, setDirNombre]               = useState("");
   const [dirCorreo, setDirCorreo]               = useState("");
@@ -107,17 +116,41 @@ export default function RegistrarTemaPage() {
       getMe(),
       getMiPerfil(),
       fetch(`${API_URL}/api/programas/grupos-investigacion`).then(r => r.json()).catch(() => []),
+      idEditar ? fetch(`${API_URL}/api/solicitudes/${idEditar}`).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
+      !idEditar ? fetch(`${API_URL}/api/solicitudes/registrar-tema/tema-activo`, { headers: authHeaders() }).then(r => r.ok ? r.json() : null) : Promise.resolve(null),
     ])
-      .then(([u, p, grps]) => {
+      .then(([u, p, grps, solicitud, activo]) => {
         setUser(u); setPerfil(p);
         setGrupos(Array.isArray(grps) ? grps : []);
-        setDirNombre(p.proyecto?.director   ?? "");
-        setCodNombre(p.proyecto?.codirector ?? "");
-        setTitulo(p.proyecto?.titulo        ?? "");
+
+        if (activo && activo.tiene_tema_activo) {
+          setTemaActivo(activo);
+        }
+
+        if (solicitud && solicitud.datos_formulario) {
+          const d = solicitud.datos_formulario;
+          setDirNombre(d.director ?? "");
+          setDirCorreo(d.director_correo ?? "");
+          setCodNombre(d.codirector ?? "");
+          setCodCorreo(d.codirector_correo ?? "");
+          setCodCargo(d.codirector_cargo ?? "");
+          setCodEntidad(d.codirector_entidad ?? "");
+          setTitulo(d.titulo ?? "");
+          setLineaEstrategica(d.linea_estrategica ?? "");
+          setGrupoInv(d.grupo_investigacion ?? "");
+          setAreaFormacion(d.area_formacion ?? "");
+          setObjetivo(d.objetivo_general ?? "");
+          setAlcances(d.descripcion_alcances ?? "");
+          setDocumentoExistente(solicitud.documento ?? null);
+        } else {
+          setDirNombre(p.proyecto?.director   ?? "");
+          setCodNombre(p.proyecto?.codirector ?? "");
+          setTitulo(p.proyecto?.titulo        ?? "");
+        }
       })
       .catch((e) => setErrorCarga(e.message))
       .finally(() => setCargando(false));
-  }, []);
+  }, [idEditar]);
 
   useEffect(() => {
     return () => { if (prevVisorUrl.current) URL.revokeObjectURL(prevVisorUrl.current); };
@@ -176,13 +209,28 @@ export default function RegistrarTemaPage() {
 
   const esCorreoValido = (c: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
 
-  const validar = (): boolean => {
+  const ORDEN_CAMPOS = [
+    "director_nombre", "director_correo",
+    "codirector_nombre", "codirector_correo", "codirector_cargo", "codirector_entidad",
+    "titulo", "linea_estrategica", "grupo_inv", "area_formacion",
+    "objetivo_general", "alcances", "documento",
+  ];
+
+  const validar = (): Record<string, string> => {
     const e: Record<string, string> = {};
     if (!dirNombre.trim())                e.director_nombre   = "Obligatorio.";
     if (!dirCorreo.trim())                e.director_correo   = "Obligatorio.";
     else if (!esCorreoValido(dirCorreo))  e.director_correo   = "Correo inválido.";
-    const tieneCod = codNombre.trim() || codCorreo.trim();
-    if (tieneCod && codCorreo.trim() && !esCorreoValido(codCorreo)) e.codirector_correo = "Correo inválido.";
+
+    const tieneCod = codNombre.trim() || codCorreo.trim() || codCargo.trim() || codEntidad.trim();
+    if (tieneCod) {
+      if (!codNombre.trim())              e.codirector_nombre  = "Obligatorio si registras un codirector.";
+      if (!codCorreo.trim())              e.codirector_correo  = "Obligatorio si registras un codirector.";
+      else if (!esCorreoValido(codCorreo)) e.codirector_correo = "Correo inválido.";
+      if (!codCargo.trim())               e.codirector_cargo   = "Obligatorio si registras un codirector.";
+      if (!codEntidad.trim())             e.codirector_entidad = "Obligatorio si registras un codirector.";
+    }
+
     if (!titulo.trim())                   e.titulo            = "Obligatorio.";
     if (!lineaEstrategica.trim())         e.linea_estrategica = "Obligatorio.";
     if (!grupoInv.trim())                 e.grupo_inv         = "Obligatorio.";
@@ -190,11 +238,28 @@ export default function RegistrarTemaPage() {
     if (!objetivo.trim())                 e.objetivo_general  = "Obligatorio.";
     else if (objetivo.trim().length < 30) e.objetivo_general  = "Mínimo 30 caracteres.";
     if (!alcances.trim())                 e.alcances          = "Obligatorio.";
-    setErrors(e); return Object.keys(e).length === 0;
+    if (!pdfFirmado && !documentoExistente)
+                                           e.documento         = "Debes generar y firmar el formulario antes de enviar la solicitud.";
+    return e;
+  };
+
+  const irAlPrimerError = (erroresEncontrados: Record<string, string>) => {
+    const primerCampo = ORDEN_CAMPOS.find((campo) => erroresEncontrados[campo]);
+    if (!primerCampo) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${primerCampo}"]`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus({ preventScroll: true });
+    }
   };
 
   const handleSubmit = async () => {
-    if (!validar()) return;
+    const erroresEncontrados = validar();
+    setErrors(erroresEncontrados);
+    if (Object.keys(erroresEncontrados).length > 0) {
+      irAlPrimerError(erroresEncontrados);
+      return;
+    }
     setEnviando(true); setErrorServidor(null);
     try {
       const formData = new FormData();
@@ -216,10 +281,17 @@ export default function RegistrarTemaPage() {
         const bytes = Uint8Array.from(atob(pdfFirmado), c => c.charCodeAt(0));
         formData.append("documento", new Blob([bytes], { type: "application/pdf" }), "formulario_tema_firmado.pdf");
       }
-      const res = await fetch(`${API_URL}/api/solicitudes/registrar-tema`, {
-        method: "POST", headers: authHeaders(), body: formData,
+      const url = modoEdicion
+        ? `${API_URL}/api/solicitudes/registrar-tema/${idEditar}/editar`
+        : `${API_URL}/api/solicitudes/registrar-tema`;
+      const res = await fetch(url, {
+        method: modoEdicion ? "PUT" : "POST", headers: authHeaders(), body: formData,
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Error al enviar.");
+      if (modoEdicion) {
+        router.push("/dashboard/estudiante/solicitudes");
+        return;
+      }
       setRadicado((await res.json()).numero_radicado);
       setEnviado(true);
     } catch (err: unknown) {
@@ -251,6 +323,40 @@ export default function RegistrarTemaPage() {
   if (cargando) return <div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>;
   if (errorCarga) return <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700 text-sm">⚠️ {errorCarga}</div>;
 
+  if (temaActivo && !modoEdicion) {
+    const estadoLabel: Record<string, string> = {
+      enviada: "enviado, esperando revisión del director",
+      en_revision: "en revisión del coordinador",
+      en_comite: "en revisión del comité",
+      aprobada: "aprobado",
+    };
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-white rounded-xl shadow-sm p-10 text-center space-y-4">
+          <div className="text-6xl">📝</div>
+          <h2 className="text-2xl font-bold text-gray-800">Ya tienes un tema registrado</h2>
+          <p className="text-gray-500">
+            Tu tema (<span className="font-mono">{temaActivo.numero_radicado}</span>) está actualmente{" "}
+            <span className="font-semibold">{estadoLabel[temaActivo.estado] ?? temaActivo.estado}</span>.
+            No puedes registrar uno nuevo hasta que este sea cancelado o rechazado.
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            {temaActivo.editable && (
+              <Link href={`/dashboard/estudiante/solicitudes/editar/${temaActivo.id}`}
+                className="bg-amber-500 text-white px-6 py-2.5 rounded-lg hover:bg-amber-600 font-semibold text-sm">
+                ✏️ Editar ese tema
+              </Link>
+            )}
+            <Link href="/dashboard/estudiante/solicitudes"
+              className="border border-gray-200 text-gray-600 px-6 py-2.5 rounded-lg hover:bg-gray-50 font-semibold text-sm">
+              Ver mis solicitudes
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {mostrarFirmador && pdfGenerado && (
@@ -267,8 +373,10 @@ export default function RegistrarTemaPage() {
             <span>›</span>
             <span className="text-gray-700 font-medium">Registrar Tema</span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-800">📝 Registrar Tema</h1>
-          <p className="text-gray-500 mt-1">Registra el título, director y objetivo general de tu trabajo de grado.</p>
+          <h1 className="text-2xl font-bold text-gray-800">{modoEdicion ? "✏️ Editar Tema Registrado" : "📝 Registrar Tema"}</h1>
+          <p className="text-gray-500 mt-1">
+            {modoEdicion ? "Ajusta los datos de tu tema y guarda los cambios." : "Registra el título, director y objetivo general de tu trabajo de grado."}
+          </p>
         </div>
 
         {errorServidor && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">⚠️ {errorServidor}</div>}
@@ -321,12 +429,15 @@ export default function RegistrarTemaPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo</label>
                   <input type="text" value={codNombre} onChange={e => onCodNombre(e.target.value)}
+                    data-field="codirector_nombre"
                     placeholder="Nombre del codirector"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_nombre ? "border-red-400" : "border-gray-200"}`} />
+                  {errors.codirector_nombre && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_nombre}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Correo institucional</label>
                   <input type="email" value={codCorreo} onChange={e => onCodCorreo(e.target.value)}
+                    data-field="codirector_correo"
                     placeholder="correo@uis.edu.co"
                     className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_correo ? "border-red-400" : "border-gray-200"}`} />
                   {errors.codirector_correo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_correo}</p>}
@@ -334,14 +445,18 @@ export default function RegistrarTemaPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Categoría / Cargo</label>
                   <input type="text" value={codCargo} onChange={e => setCodCargo(e.target.value)}
+                    data-field="codirector_cargo"
                     placeholder="Ej. Profesor planta, Investigador"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_cargo ? "border-red-400" : "border-gray-200"}`} />
+                  {errors.codirector_cargo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_cargo}</p>}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">Universidad / Entidad</label>
                   <input type="text" value={codEntidad} onChange={e => setCodEntidad(e.target.value)}
+                    data-field="codirector_entidad"
                     placeholder="Ej. UIS, Universidad Nacional"
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white" />
+                    className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_entidad ? "border-red-400" : "border-gray-200"}`} />
+                  {errors.codirector_entidad && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_entidad}</p>}
                 </div>
               </div>
             </div>
@@ -359,6 +474,7 @@ export default function RegistrarTemaPage() {
                 Título del Trabajo <span className="text-red-500">*</span>
               </label>
               <input type="text" value={titulo}
+                data-field="titulo"
                 onChange={e => { setTitulo(e.target.value); setErrors(p => ({ ...p, titulo: "" })); }}
                 placeholder="Título completo del trabajo de grado"
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.titulo ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -369,12 +485,8 @@ export default function RegistrarTemaPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
                 Línea Estratégica de Aporte al Desarrollo Regional <span className="text-red-500">*</span>
               </label>
-              <div className="text-xs text-gray-400 mb-2">
-                <p>Consulta las líneas disponibles en:</p>
-                <a href={LINK_LINEA} target="_blank" rel="noreferrer"
-                  className="text-blue-600 hover:underline break-all">{LINK_LINEA}</a>
-              </div>
               <input type="text" value={lineaEstrategica}
+                data-field="linea_estrategica"
                 onChange={e => { setLineaEstrategica(e.target.value); setErrors(p => ({ ...p, linea_estrategica: "" })); }}
                 placeholder="Ej. Energía eléctrica y telecomunicaciones"
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.linea_estrategica ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -389,6 +501,7 @@ export default function RegistrarTemaPage() {
                 </label>
                 <select
                   value={grupoInv}
+                  data-field="grupo_inv"
                   onChange={e => { setGrupoInv(e.target.value); setErrors(p => ({ ...p, grupo_inv: "" })); }}
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white appearance-none ${errors.grupo_inv ? "border-red-400 bg-red-50" : "border-gray-200"}`}>
                   <option value="">Seleccionar grupo...</option>
@@ -404,6 +517,7 @@ export default function RegistrarTemaPage() {
                   Área de Formación <span className="text-red-500">*</span>
                 </label>
                 <input type="text" value={areaFormacion}
+                  data-field="area_formacion"
                   onChange={e => { setAreaFormacion(e.target.value); setErrors(p => ({ ...p, area_formacion: "" })); }}
                   placeholder="Ej. Ingeniería Electrónica"
                   className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 ${errors.area_formacion ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -416,6 +530,7 @@ export default function RegistrarTemaPage() {
                 Objetivo General <span className="text-red-500">*</span>
               </label>
               <textarea value={objetivo} rows={4}
+                data-field="objetivo_general"
                 onChange={e => { setObjetivo(e.target.value); setErrors(p => ({ ...p, objetivo_general: "" })); }}
                 placeholder="Describe el objetivo general del trabajo (mínimo 30 caracteres)."
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${errors.objetivo_general ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -430,6 +545,7 @@ export default function RegistrarTemaPage() {
                 Descripción de los Alcances <span className="text-red-500">*</span>
               </label>
               <textarea value={alcances} rows={4}
+                data-field="alcances"
                 onChange={e => { setAlcances(e.target.value); setErrors(p => ({ ...p, alcances: "" })); }}
                 placeholder="Describe los alcances del trabajo de grado."
                 className={`w-full border rounded-lg px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 resize-none ${errors.alcances ? "border-red-400 bg-red-50" : "border-gray-200"}`} />
@@ -444,10 +560,17 @@ export default function RegistrarTemaPage() {
               <h2 className="text-base font-bold text-gray-700">Documento</h2>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+            {documentoExistente && !pdfFirmado && (
+              <a href={`${API_URL}${documentoExistente}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm text-green-700 hover:underline">
+                📄 Ver documento actualmente adjunto
+              </a>
+            )}
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3" data-field="documento" tabIndex={-1}>
               <div>
-                <p className="text-sm font-semibold text-blue-800">📋 Formulario oficial UIS</p>
-                <p className="text-xs text-gray-500 mt-0.5">Genera el formulario pre-llenado con todos los datos ingresados</p>
+                <p className="text-sm font-semibold text-blue-800">📋 Formulario oficial UIS <span className="text-red-500">*</span></p>
+                <p className="text-xs text-gray-500 mt-0.5">Debes generar y firmar el formulario antes de poder enviar la solicitud</p>
               </div>
               <div className="flex gap-2">
                 <button onClick={handlePrevisualizar} disabled={generandoVer || generandoPDF}
@@ -460,6 +583,7 @@ export default function RegistrarTemaPage() {
                 </button>
               </div>
               {pdfFirmado && <p className="text-xs text-green-700 text-center">✅ Formulario firmado — se adjuntará al enviar</p>}
+              {errors.documento && <p className="text-xs text-red-600 text-center font-medium">⚠️ {errors.documento}</p>}
             </div>
 
             {visorUrl && (
@@ -481,11 +605,21 @@ export default function RegistrarTemaPage() {
             <Link href="/dashboard/estudiante/solicitudes/nueva" className="text-sm text-gray-500 hover:text-gray-700 font-medium">← Volver</Link>
             <button onClick={handleSubmit} disabled={enviando}
               className={`flex items-center gap-2 bg-green-700 text-white px-8 py-3 rounded-lg font-semibold text-sm transition-colors ${enviando ? "opacity-70 cursor-not-allowed" : "hover:bg-green-800"}`}>
-              {enviando ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Enviando...</> : "Registrar Tema →"}
+              {enviando
+                ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> {modoEdicion ? "Guardando..." : "Enviando..."}</>
+                : (modoEdicion ? "Guardar cambios" : "Registrar Tema →")}
             </button>
           </div>
         </div>
       </div>
     </>
+  );
+}
+
+export default function RegistrarTemaPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64 text-gray-400">Cargando...</div>}>
+      <RegistrarTemaForm />
+    </Suspense>
   );
 }
