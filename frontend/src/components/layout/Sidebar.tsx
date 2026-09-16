@@ -43,8 +43,10 @@ const menus: Record<string, { label: string; href: string; icon: string; exacto?
     { label: "Documentos",  href: "/dashboard/documentos",                   icon: "📁" },
   ],
   comite: [
-    { label: "Inicio",      href: "/dashboard/comite",      icon: "🏠", exacto: true },
-    { label: "Documentos",  href: "/dashboard/documentos",  icon: "📁" },
+    { label: "Inicio",      href: "/dashboard/comite",             icon: "🏠", exacto: true },
+    { label: "Solicitudes", href: "/dashboard/comite/solicitudes", icon: "🏛️" },
+    { label: "Historial",   href: "/dashboard/comite/historial",  icon: "📚" },
+    { label: "Documentos",  href: "/dashboard/documentos",         icon: "📁" },
   ],
 };
 
@@ -108,6 +110,11 @@ export default function Sidebar() {
           .then(res => res.json()).then(d => setPendientes(d.solicitudes_pendientes ?? 0)).catch(() => {});
         fetch(`${API_URL}/api/firmas/pendientes/coordinador`, { headers: h })
           .then(r => r.json()).then(d => setFirmasPendientes(Array.isArray(d) ? d.length : 0)).catch(() => {});
+      }
+
+      if (r === "comite") {
+        fetch(`${API_URL}/api/solicitudes/pendientes/comite`, { headers: h })
+          .then(res => res.json()).then(d => setPendientes(Array.isArray(d) ? d.length : 0)).catch(() => {});
       }
     });
   }, []);
@@ -183,7 +190,8 @@ export default function Sidebar() {
           {menuItems.map((item) => {
             const activo      = isActive(pathname, item.href, item.exacto);
             const esBadge     = (rol === "director" && item.label === "Notificaciones") ||
-                                ((rol === "coordinador" || rol === "secretaria") && item.label === "Solicitudes");
+                                ((rol === "coordinador" || rol === "secretaria") && item.label === "Solicitudes") ||
+                                (rol === "comite" && item.label === "Solicitudes");
             const esFirmas    = item.label === "Por firmar";
             const esAvalGrupo = item.label === "Aval grupo inv.";
 

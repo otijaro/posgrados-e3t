@@ -70,6 +70,7 @@ interface SolicitudDetalle {
   fecha_envio: string | null;
   documento: string | null;
   respuesta: string | null;
+  observaciones: string | null;
   solicitante_nombre: string;
   flujo: FlujoPaso[];
 }
@@ -115,6 +116,13 @@ export default function DetalleSolicitudDirector() {
         </h1>
         <p className="text-gray-500 mt-1">{sol.asunto}</p>
       </div>
+
+      {sol.estado === "enviada" && (
+        <Link href={`/dashboard/director/solicitudes?id=${sol.id}`}
+          className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700 font-semibold text-sm">
+          ✍️ Ir a firmar / decidir esta solicitud
+        </Link>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm p-6 space-y-5">
 
@@ -165,6 +173,14 @@ export default function DetalleSolicitudDirector() {
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-xs font-semibold text-red-700 mb-1">Motivo de rechazo:</p>
             <p className="text-sm text-red-600">{sol.respuesta}</p>
+          </div>
+        )}
+
+        {/* Observaciones internas (director/coordinador → siguiente responsable) */}
+        {sol.observaciones && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-blue-700 mb-1">📝 Observaciones internas:</p>
+            <pre className="text-sm text-blue-700 whitespace-pre-wrap font-sans">{sol.observaciones}</pre>
           </div>
         )}
 

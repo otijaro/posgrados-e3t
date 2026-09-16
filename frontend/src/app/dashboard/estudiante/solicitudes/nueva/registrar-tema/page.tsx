@@ -190,6 +190,12 @@ function RegistrarTemaForm() {
   }, []);
 
   const handlePrevisualizar = async () => {
+    const erroresEncontrados = validarCamposFormulario();
+    if (Object.keys(erroresEncontrados).length > 0) {
+      setErrors(erroresEncontrados);
+      irAlPrimerError(erroresEncontrados);
+      return;
+    }
     setGenerandoVer(true); setErrorServidor(null);
     try { mostrarEnVisor(await fetchPDF()); }
     catch (err: unknown) { setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF"); }
@@ -197,6 +203,12 @@ function RegistrarTemaForm() {
   };
 
   const handleFirmar = async () => {
+    const erroresEncontrados = validarCamposFormulario();
+    if (Object.keys(erroresEncontrados).length > 0) {
+      setErrors(erroresEncontrados);
+      irAlPrimerError(erroresEncontrados);
+      return;
+    }
     setGenerandoPDF(true); setErrorServidor(null);
     try { const b64 = await fetchPDF(); setPdfGenerado(b64); setMostrarFirmador(true); }
     catch (err: unknown) { setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF"); }
@@ -208,6 +220,8 @@ function RegistrarTemaForm() {
   }, [mostrarEnVisor]);
 
   const esCorreoValido = (c: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c);
+  const esCorreoUIS = (c: string) => /@([a-z0-9-]+\.)*uis\.edu\.co$/i.test(c.trim());
+  const directorEsExterno = dirCorreo.trim() !== "" && esCorreoValido(dirCorreo) && !esCorreoUIS(dirCorreo);
 
   const ORDEN_CAMPOS = [
     "director_nombre", "director_correo",
@@ -223,7 +237,16 @@ function RegistrarTemaForm() {
     else if (!esCorreoValido(dirCorreo))  e.director_correo   = "Correo inválido.";
 
     const tieneCod = codNombre.trim() || codCorreo.trim() || codCargo.trim() || codEntidad.trim();
-    if (tieneCod) {
+
+    if (directorEsExterno) {
+      // Director externo a la UIS → el codirector es obligatorio y debe ser de la UIS
+      if (!codNombre.trim())
+        e.codirector_nombre = "El director es externo a la UIS: debes registrar un codirector de la UIS.";
+      if (!codCorreo.trim())
+        e.codirector_correo = "Obligatorio: el codirector debe tener correo institucional de la UIS.";
+      else if (!esCorreoUIS(codCorreo))
+        e.codirector_correo = "El codirector debe ser de la UIS (correo @uis.edu.co).";
+    } else if (tieneCod) {
       if (!codNombre.trim())              e.codirector_nombre  = "Obligatorio si registras un codirector.";
       if (!codCorreo.trim())              e.codirector_correo  = "Obligatorio si registras un codirector.";
       else if (!esCorreoValido(codCorreo)) e.codirector_correo = "Correo inválido.";
@@ -240,6 +263,15 @@ function RegistrarTemaForm() {
     if (!alcances.trim())                 e.alcances          = "Obligatorio.";
     if (!pdfFirmado && !documentoExistente)
                                            e.documento         = "Debes generar y firmar el formulario antes de enviar la solicitud.";
+    return e;
+  };
+
+  /** Igual que validar(), pero sin exigir el documento firmado — se usa antes
+   *  de generar/previsualizar/firmar el PDF, ya que en ese punto el documento
+   *  todavía no existe (es justo lo que se va a generar). */
+  const validarCamposFormulario = (): Record<string, string> => {
+    const e = validar();
+    delete e.documento;
     return e;
   };
 
@@ -360,7 +392,7 @@ function RegistrarTemaForm() {
   return (
     <>
       {mostrarFirmador && pdfGenerado && (
-        <FirmadorPDF pdfBase64={pdfGenerado} soloVer={false}
+        <FirmadorPDF pdfBase64={pdfGenerado} soloVer={false} rolFirmante="estudiante"
           onFirmado={handleFirmado} onCerrar={() => setMostrarFirmador(false)} />
       )}
 
@@ -423,11 +455,23 @@ function RegistrarTemaForm() {
               errorNombre={errors.director_nombre} errorCorreo={errors.director_correo} />
             <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-3">
               <p className="text-sm font-semibold text-gray-600">
-                Codirector <span className="ml-2 text-xs font-normal text-gray-400">Opcional</span>
+                Codirector
+                {directorEsExterno ? (
+                  <span className="ml-2 text-xs font-normal text-amber-600">Obligatorio — el director es externo a la UIS</span>
+                ) : (
+                  <span className="ml-2 text-xs font-normal text-gray-400">Opcional</span>
+                )}
               </p>
+              {directorEsExterno && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  ⚠️ Como el director tiene correo externo a la UIS, el codirector debe ser docente de la UIS (correo @uis.edu.co).
+                </p>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Nombre completo</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Nombre completo {directorEsExterno && <span className="text-red-500">*</span>}
+                  </label>
                   <input type="text" value={codNombre} onChange={e => onCodNombre(e.target.value)}
                     data-field="codirector_nombre"
                     placeholder="Nombre del codirector"
@@ -435,29 +479,35 @@ function RegistrarTemaForm() {
                   {errors.codirector_nombre && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_nombre}</p>}
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Correo institucional</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Correo institucional {directorEsExterno && <span className="text-red-500">*</span>}
+                  </label>
                   <input type="email" value={codCorreo} onChange={e => onCodCorreo(e.target.value)}
                     data-field="codirector_correo"
-                    placeholder="correo@uis.edu.co"
+                    placeholder={directorEsExterno ? "nombre@uis.edu.co" : "correo@uis.edu.co"}
                     className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_correo ? "border-red-400" : "border-gray-200"}`} />
                   {errors.codirector_correo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_correo}</p>}
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Categoría / Cargo</label>
-                  <input type="text" value={codCargo} onChange={e => setCodCargo(e.target.value)}
-                    data-field="codirector_cargo"
-                    placeholder="Ej. Profesor planta, Investigador"
-                    className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_cargo ? "border-red-400" : "border-gray-200"}`} />
-                  {errors.codirector_cargo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_cargo}</p>}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">Universidad / Entidad</label>
-                  <input type="text" value={codEntidad} onChange={e => setCodEntidad(e.target.value)}
-                    data-field="codirector_entidad"
-                    placeholder="Ej. UIS, Universidad Nacional"
-                    className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_entidad ? "border-red-400" : "border-gray-200"}`} />
-                  {errors.codirector_entidad && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_entidad}</p>}
-                </div>
+                {!directorEsExterno && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Categoría / Cargo</label>
+                      <input type="text" value={codCargo} onChange={e => setCodCargo(e.target.value)}
+                        data-field="codirector_cargo"
+                        placeholder="Ej. Profesor planta, Investigador"
+                        className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_cargo ? "border-red-400" : "border-gray-200"}`} />
+                      {errors.codirector_cargo && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_cargo}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Universidad / Entidad</label>
+                      <input type="text" value={codEntidad} onChange={e => setCodEntidad(e.target.value)}
+                        data-field="codirector_entidad"
+                        placeholder="Ej. UIS, Universidad Nacional"
+                        className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.codirector_entidad ? "border-red-400" : "border-gray-200"}`} />
+                      {errors.codirector_entidad && <p className="text-red-500 text-xs mt-0.5">{errors.codirector_entidad}</p>}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
