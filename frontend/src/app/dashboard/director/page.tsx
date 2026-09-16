@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getMisEstudiantes, darAvalReporte, ResumenDirector, EstudianteACargo } from "@/lib/api";
 import { getMe } from "@/lib/auth";
 import { useRouter } from "next/navigation";
@@ -64,7 +64,8 @@ function TarjetaEstudiante({
   est: EstudianteACargo;
   onAval: (reporteId: number) => void;
 }) {
-  const [tab, setTab] = useState<"resumen" | "reportes" | "solicitudes" | "evaluaciones">("resumen");
+  const solicitudesRef = useRef<HTMLDivElement>(null);
+  const scrollASolicitudes = () => solicitudesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -93,69 +94,48 @@ function TarjetaEstudiante({
         </div>
       </div>
 
-      {/* Alertas rápidas */}
+      {/* Alertas rápidas — clicables, llevan a la sección correspondiente más abajo */}
       {(est.reportes_pendientes > 0 || est.solicitudes_pendientes > 0) && (
         <div className="flex gap-2 px-5 py-2 bg-amber-50 border-b border-amber-100">
           {est.reportes_pendientes > 0 && (
-            <span className="text-xs text-amber-700 font-medium">
+            <button className="text-xs text-amber-700 font-medium hover:underline">
               ⏳ {est.reportes_pendientes} reporte{est.reportes_pendientes > 1 ? "s" : ""} pendiente{est.reportes_pendientes > 1 ? "s" : ""} de aval
-            </span>
+            </button>
           )}
           {est.solicitudes_pendientes > 0 && (
-            <span className="text-xs text-orange-700 font-medium">
+            <button onClick={scrollASolicitudes} className="text-xs text-orange-700 font-medium hover:underline">
               📋 {est.solicitudes_pendientes} solicitud{est.solicitudes_pendientes > 1 ? "es" : ""} pendiente{est.solicitudes_pendientes > 1 ? "s" : ""}
-            </span>
+            </button>
           )}
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex border-b border-gray-100 text-xs font-medium">
-        {(["resumen", "reportes", "solicitudes", "evaluaciones"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 capitalize transition-colors ${
-              tab === t
-                ? "border-b-2 border-green-700 text-green-700"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {t === "resumen" && "Resumen"}
-            {t === "reportes" && `Reportes (${est.reportes.length})`}
-            {t === "solicitudes" && `Solicitudes (${est.solicitudes.length})`}
-            {t === "evaluaciones" && `Evaluaciones (${est.evaluaciones.length})`}
-          </button>
-        ))}
-      </div>
+      {/* Todo el contenido, sin pestañas — visible de una sola vez */}
+      <div className="p-5 space-y-6">
 
-      {/* Contenido del tab */}
-      <div className="p-5">
-
-        {/* Resumen */}
-        {tab === "resumen" && (
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-0.5">Reportes entregados</p>
-              <p className="font-bold text-gray-800">{est.reportes.length}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-0.5">Reportes con aval</p>
-              <p className="font-bold text-green-700">{est.reportes.filter(r => r.aval_director === 1).length}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-0.5">Solicitudes activas</p>
-              <p className="font-bold text-gray-800">{est.solicitudes.length}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-0.5">Evaluaciones</p>
-              <p className="font-bold text-gray-800">{est.evaluaciones.length}</p>
-            </div>
+        {/* Resumen rápido */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-0.5">Reportes entregados</p>
+            <p className="font-bold text-gray-800">{est.reportes.length}</p>
           </div>
-        )}
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-0.5">Reportes con aval</p>
+            <p className="font-bold text-green-700">{est.reportes.filter(r => r.aval_director === 1).length}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-0.5">Solicitudes activas</p>
+            <p className="font-bold text-gray-800">{est.solicitudes.length}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-400 mb-0.5">Evaluaciones</p>
+            <p className="font-bold text-gray-800">{est.evaluaciones.length}</p>
+          </div>
+        </div>
 
         {/* Reportes */}
-        {tab === "reportes" && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Reportes ({est.reportes.length})</p>
           <div className="space-y-3">
             {est.reportes.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Sin reportes registrados</p>
@@ -187,10 +167,11 @@ function TarjetaEstudiante({
               ))
             )}
           </div>
-        )}
+        </div>
 
         {/* Solicitudes */}
-        {tab === "solicitudes" && (
+        <div ref={solicitudesRef}>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Solicitudes ({est.solicitudes.length})</p>
           <div className="space-y-3">
             {est.solicitudes.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Sin solicitudes registradas</p>
@@ -210,10 +191,11 @@ function TarjetaEstudiante({
               ))
             )}
           </div>
-        )}
+        </div>
 
         {/* Evaluaciones */}
-        {tab === "evaluaciones" && (
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Evaluaciones ({est.evaluaciones.length})</p>
           <div className="space-y-3">
             {est.evaluaciones.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Sin evaluaciones registradas</p>
@@ -240,7 +222,7 @@ function TarjetaEstudiante({
               ))
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
@@ -276,7 +258,7 @@ export default function DashboardDirector() {
     alert("Funcionalidad de aval disponible cuando los reportes tengan ID en la BD");
   };
 
-  const estudiantesFiltrados = data?.estudiantes.filter((e) => {
+  const estudiantesFiltrados = (data?.estudiantes.filter((e) => {
     const coincideFiltro =
       filtro === "todos" ||
       (filtro === "director" && e.rol_docente === "director") ||
@@ -287,7 +269,12 @@ export default function DashboardDirector() {
       e.titulo_proyecto.toLowerCase().includes(busqueda.toLowerCase()) ||
       e.codigo_estudiante.includes(busqueda);
     return coincideFiltro && coincideBusqueda;
-  }) ?? [];
+  }) ?? []).sort((a, b) => {
+    // Estudiantes con solicitudes o reportes pendientes primero
+    const pendientesA = (a.solicitudes_pendientes > 0 ? 1 : 0) + (a.reportes_pendientes > 0 ? 1 : 0);
+    const pendientesB = (b.solicitudes_pendientes > 0 ? 1 : 0) + (b.reportes_pendientes > 0 ? 1 : 0);
+    return pendientesB - pendientesA;
+  });
 
   if (loading) {
     return (

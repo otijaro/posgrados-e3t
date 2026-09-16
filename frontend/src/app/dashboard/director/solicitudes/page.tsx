@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 
 const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: false });
@@ -60,8 +60,44 @@ function ModalRechazo({ onConfirmar, onCancelar }: { onConfirmar: (motivo: strin
   );
 }
 
-export default function SolicitudesPendientesDirector() {
+// Modal de aprobación con observaciones
+function ModalAprobar({ onConfirmar, onCancelar }: { onConfirmar: (observaciones: string) => void; onCancelar: () => void }) {
+  const [observaciones, setObservaciones] = useState("");
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <h2 className="text-lg font-bold text-gray-800">✅ Aprobar y enviar</h2>
+        <p className="text-sm text-gray-500">
+          Si quieres, deja una observación para el coordinador o el comité asesor (opcional — no la ve el estudiante).
+        </p>
+        <textarea
+          value={observaciones}
+          onChange={e => setObservaciones(e.target.value)}
+          rows={4}
+          placeholder="Ej. Recomiendo revisar el alcance del objetivo 2 antes de aprobar en comité..."
+          className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+          autoFocus
+        />
+        <div className="flex gap-3 pt-2">
+          <button onClick={onCancelar}
+            className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onConfirmar(observaciones.trim())}
+            className="flex-1 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800">
+            Confirmar aprobación
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SolicitudesPendientesDirectorInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const idFocalizada = searchParams.get("id");
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [cargando, setCargando]       = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -75,6 +111,7 @@ export default function SolicitudesPendientesDirector() {
   const [pdfFirmado, setPdfFirmado]           = useState<string | null>(null);
   const [procesando, setProcesando]           = useState(false);
   const [mostrarModalRechazo, setMostrarModalRechazo] = useState(false);
+  const [mostrarModalAprobar, setMostrarModalAprobar] = useState(false);
   const visorRef     = useRef<HTMLDivElement>(null);
   const prevVisorUrl = useRef<string | null>(null);
 
@@ -82,7 +119,15 @@ export default function SolicitudesPendientesDirector() {
     setCargando(true);
     fetch(`${API_URL}/api/solicitudes/pendientes/director`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : [])
-      .then(data => setSolicitudes(Array.isArray(data) ? data : []))
+      .then(data => {
+        const lista = Array.isArray(data) ? data : [];
+        setSolicitudes(lista);
+        // Si venimos desde el detalle de una solicitud específica (?id=), seleccionarla automáticamente.
+        if (idFocalizada) {
+          const encontrada = lista.find((s: Solicitud) => String(s.id_solicitud ?? s.id) === idFocalizada);
+          if (encontrada) cargarPDF(encontrada);
+        }
+      })
       .catch(() => setError("No se pudieron cargar las solicitudes"))
       .finally(() => setCargando(false));
   };
@@ -126,8 +171,9 @@ export default function SolicitudesPendientesDirector() {
     mostrarEnVisor(b64);
   };
 
-  const handleAprobar = async () => {
+  const handleAprobar = async (observaciones: string) => {
     if (!seleccionada) return;
+    setMostrarModalAprobar(false);
     setProcesando(true); setError(null);
     try {
       const id = seleccionada.id_solicitud ?? seleccionada.id;
@@ -145,7 +191,7 @@ export default function SolicitudesPendientesDirector() {
       const res = await fetch(`${API_URL}/api/solicitudes/${id}/director/accion`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ accion: "aprobar", motivo: "Aprobado por director de tesis" }),
+        body: JSON.stringify({ accion: "aprobar", observaciones: observaciones || undefined }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Error al aprobar");
 
@@ -187,13 +233,18 @@ export default function SolicitudesPendientesDirector() {
   return (
     <>
       {mostrarFirmador && pdfB64 && (
-        <FirmadorPDF pdfBase64={pdfB64} soloVer={false}
+        <FirmadorPDF pdfBase64={pdfB64} soloVer={false} rolFirmante="director"
           onFirmado={handleFirmado} onCerrar={() => setMostrarFirmador(false)} />
       )}
       {mostrarModalRechazo && (
         <ModalRechazo
           onConfirmar={handleRechazar}
           onCancelar={() => setMostrarModalRechazo(false)} />
+      )}
+      {mostrarModalAprobar && (
+        <ModalAprobar
+          onConfirmar={handleAprobar}
+          onCancelar={() => setMostrarModalAprobar(false)} />
       )}
 
       <div className="max-w-5xl mx-auto space-y-6">
@@ -284,7 +335,7 @@ export default function SolicitudesPendientesDirector() {
                       className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
                       ❌ Rechazar
                     </button>
-                    <button onClick={handleAprobar} disabled={procesando || (!!pdfB64 && !pdfFirmado)}
+                    <button onClick={() => setMostrarModalAprobar(true)} disabled={procesando || (!!pdfB64 && !pdfFirmado)}
                       className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
                       {procesando
                         ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Procesando...</>
@@ -315,5 +366,13 @@ export default function SolicitudesPendientesDirector() {
         </div>
       </div>
     </>
+  );
+}
+
+export default function SolicitudesPendientesDirector() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-green-700 border-t-transparent rounded-full animate-spin" /></div>}>
+      <SolicitudesPendientesDirectorInner />
+    </Suspense>
   );
 }

@@ -103,6 +103,7 @@ def _serializar_solicitud(s: Solicitud) -> dict:
         "fecha_envio":       s.fecha_envio.strftime("%Y-%m-%d") if s.fecha_envio else None,
         "documento":         s.documentos_adjuntos,
         "respuesta":         s.respuesta,
+        "observaciones":     s.observaciones,
         "solicitante_nombre": s.solicitante.nombre_completo if s.solicitante else "—",
         "datos_formulario":  datos_form,
     }
@@ -389,6 +390,22 @@ def pendientes_coordinador(token: str = Depends(oauth2_scheme), db: Session = De
         for s in solicitudes
     ]
 
+@router.get("/historial/comite")
+def historial_comite(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """
+    Todas las solicitudes que han llegado al comité (pendientes, aprobadas o
+    rechazadas por él), para el módulo de historial del rol Comité Asesor.
+    """
+    _get_persona_autenticada(token, db)
+    solicitudes = (
+        db.query(Solicitud)
+        .join(FlujoAprobacion, FlujoAprobacion.id_solicitud == Solicitud.id)
+        .filter(FlujoAprobacion.rol_responsable == "comite")
+        .order_by(Solicitud.fecha_envio.desc())
+        .all()
+    )
+    return [_serializar_solicitud(s) for s in solicitudes]
+
 @router.get("/pendientes/comite")
 def pendientes_comite(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     _get_persona_autenticada(token, db)
@@ -420,8 +437,17 @@ def pendientes_comite(token: str = Depends(oauth2_scheme), db: Session = Depends
 
 class AccionBody(BaseModel):
     accion: str          # "aprobar" | "rechazar"
-    motivo: Optional[str] = None
+    motivo: Optional[str] = None            # Motivo de rechazo — visible para el estudiante
+    observaciones: Optional[str] = None     # Nota interna al aprobar — para el siguiente responsable (coordinador/comité)
     documento_firmado: Optional[str] = None  # base64 del PDF firmado
+
+def _agregar_observacion(s: Solicitud, rol: str, texto: Optional[str]):
+    """Concatena una observación nueva al historial existente, sin perder las anteriores."""
+    if not texto or not texto.strip():
+        return
+    fecha = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
+    entrada = f"[{rol.capitalize()} — {fecha}]\n{texto.strip()}"
+    s.observaciones = f"{s.observaciones}\n\n{entrada}" if s.observaciones else entrada
 
 @router.post("/{solicitud_id}/director/accion")
 def director_accion(
@@ -476,6 +502,7 @@ def director_accion(
 
         s.estado = EstadoSolicitud.EN_REVISION
         s.id_quien_responde = persona.id
+        _agregar_observacion(s, "director", body.observaciones)
         _crear_flujo_coordinador(db, solicitud_id)
 
     elif body.accion == "rechazar":
@@ -519,11 +546,23 @@ def coordinador_accion(
         raise HTTPException(status_code=404, detail="No hay flujo pendiente para el coordinador")
 
     if body.accion == "aprobar":
+        if s.documentos_adjuntos and not body.documento_firmado:
+            firma = db.execute(
+                text("SELECT firmado_coordinador FROM documento_firma WHERE id_solicitud = :id"),
+                {"id": solicitud_id}
+            ).fetchone()
+            if not firma or not firma[0]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Debe firmar el documento antes de poder aprobar la solicitud"
+                )
+
         flujo.estado          = "aprobado"
         flujo.fecha_respuesta = datetime.utcnow()
         flujo.comentarios     = body.motivo
         s.estado              = EstadoSolicitud.EN_COMITE
         s.id_quien_responde   = persona.id
+        _agregar_observacion(s, "coordinador", body.observaciones)
         _crear_flujo_comite(db, solicitud_id)
 
     elif body.accion == "rechazar":
@@ -573,6 +612,7 @@ def comite_accion(
         s.estado                = EstadoSolicitud.APROBADA
         s.id_quien_responde     = persona.id
         s.fecha_aprobacion      = datetime.utcnow()
+        _agregar_observacion(s, "comité", body.observaciones)
 
     elif body.accion == "rechazar":
         if not body.motivo:

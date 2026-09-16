@@ -14,7 +14,18 @@ interface Props {
   onFirmado: (pdfB64: string) => void;
   onCerrar: () => void;
   soloVer?: boolean;
+  /** Rol de quien está firmando — se usa para buscar automáticamente el lugar
+   *  del documento donde le corresponde firmar, y hacer scroll/foco ahí. */
+  rolFirmante?: "estudiante" | "director" | "coordinador";
 }
+
+// Palabras clave a buscar en el texto del PDF según el rol, para ubicar
+// automáticamente el lugar de la firma correspondiente.
+const PALABRAS_CLAVE_FIRMA: Record<string, string[]> = {
+  estudiante:  ["firma del estudiante", "firma estudiante"],
+  director:    ["firma del director", "firma director"],
+  coordinador: ["firma del coordinador", "firma coordinador", "firma coordinador de posgrados"],
+};
 
 // ─── Popup de dibujo a mano alzada ──────────────────────────────
 
@@ -106,10 +117,12 @@ function PopupDibujarFirma({ onListo, onCerrar }: { onListo: (dataUrl: string) =
 
 // ─── Componente principal ───────────────────────────────────────
 
-export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
+export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar, rolFirmante }: Props) {
   const canvasRef     = useRef<HTMLCanvasElement>(null);
   const contenedorRef = useRef<HTMLDivElement>(null);
+  const scrollRef      = useRef<HTMLDivElement>(null);
   const renderTaskRef = useRef<any>(null);
+  const yaHizoScrollFirma = useRef(false);
 
   const [pdfDoc, setPdfDoc]             = useState<any>(null);
   const [pagina, setPagina]             = useState(1);
@@ -128,6 +141,8 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
 
   const [procesando, setProcesando] = useState(false);
   const [firmado, setFirmado]       = useState(false);
+  const [posicionFirma, setPosicionFirma] = useState<{ pagina: number; yRelativo: number } | null>(null);
+  const [buscandoUbicacion, setBuscandoUbicacion] = useState(false);
 
   useEffect(() => {
     const s1 = document.createElement("script");
@@ -155,10 +170,46 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       const doc   = await (window as any).pdfjsLib.getDocument({ data: bytes }).promise;
       setPdfDoc(doc);
       setTotalPag(doc.numPages);
+
+      // Buscar automáticamente la página/posición donde este rol debe firmar,
+      // en vez de arrancar siempre en la página 1.
+      if (rolFirmante && PALABRAS_CLAVE_FIRMA[rolFirmante]) {
+        setBuscandoUbicacion(true);
+        const encontrado = await buscarPosicionFirma(doc, rolFirmante);
+        setBuscandoUbicacion(false);
+        if (encontrado) {
+          setPosicionFirma(encontrado);
+          setPagina(encontrado.pagina);
+          return;
+        }
+      }
       setPagina(1);
     };
     cargar();
-  }, [pdfBase64]);
+  }, [pdfBase64, rolFirmante]);
+
+  async function buscarPosicionFirma(doc: any, rol: string): Promise<{ pagina: number; yRelativo: number } | null> {
+    const terminos = PALABRAS_CLAVE_FIRMA[rol] || [];
+    if (!terminos.length) return null;
+    try {
+      for (let p = 1; p <= doc.numPages; p++) {
+        const page = await doc.getPage(p);
+        const textContent = await page.getTextContent();
+        const vp = page.getViewport({ scale: 1 });
+        for (const item of textContent.items as any[]) {
+          const texto = (item.str || "").toLowerCase();
+          if (terminos.some(t => texto.includes(t))) {
+            const yPdf = item.transform[5]; // origen abajo-izquierda
+            const yDesdeArriba = vp.height - yPdf;
+            return { pagina: p, yRelativo: yDesdeArriba / vp.height };
+          }
+        }
+      }
+    } catch (e) {
+      console.error("No se pudo buscar la posición de firma:", e);
+    }
+    return null;
+  }
 
   useEffect(() => { if (pdfDoc) renderPagina(); }, [pdfDoc, pagina, escala]);
 
@@ -179,6 +230,20 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       renderTaskRef.current = task;
       await task.promise;
       renderTaskRef.current = null;
+
+      // Si ya sabemos dónde debe firmar este rol, y estamos en esa página,
+      // hacemos scroll ahí automáticamente (solo la primera vez).
+      if (posicionFirma && posicionFirma.pagina === pagina && !yaHizoScrollFirma.current && scrollRef.current) {
+        yaHizoScrollFirma.current = true;
+        const yPx = canvas.height * posicionFirma.yRelativo;
+        const contenedorAltura = scrollRef.current.clientHeight;
+        setTimeout(() => {
+          scrollRef.current?.scrollTo({ top: Math.max(0, yPx - contenedorAltura / 3), behavior: "smooth" });
+        }, 100);
+        // También sugerimos la caja de firma cerca de esa posición, para que
+        // el estudiante/director no tenga que arrastrarla desde la esquina.
+        setCaja(c => ({ ...c, y: Math.max(0, yPx - c.h / 2) }));
+      }
     } catch (e: any) {
       if (e?.name !== "RenderingCancelledException") console.error("Error renderizando PDF:", e);
     }
@@ -418,7 +483,12 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar }: Props) {
       )}
 
       {/* Canvas + recuadro superpuesto */}
-      <div className="flex-1 overflow-auto flex items-start justify-center p-4 bg-gray-700 relative">
+      <div ref={scrollRef} className="flex-1 overflow-auto flex items-start justify-center p-4 bg-gray-700 relative">
+        {buscandoUbicacion && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-white/90 rounded-lg px-4 py-2 text-xs text-gray-600 shadow z-10">
+            🔍 Ubicando el lugar donde debes firmar...
+          </div>
+        )}
         <div ref={contenedorRef} style={{ position: "relative", display: "inline-block" }}>
           <canvas ref={canvasRef} className="shadow-2xl block" style={{ maxWidth: "100%" }} />
 

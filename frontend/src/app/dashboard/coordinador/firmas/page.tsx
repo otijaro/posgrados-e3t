@@ -56,6 +56,40 @@ function ModalRechazo({ onConfirmar, onCancelar }: {
   );
 }
 
+// Modal de aprobación con observaciones
+function ModalAprobar({ onConfirmar, onCancelar }: { onConfirmar: (observaciones: string) => void; onCancelar: () => void }) {
+  const [observaciones, setObservaciones] = useState("");
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+        <h2 className="text-lg font-bold text-gray-800">✅ Aprobar y enviar al Comité</h2>
+        <p className="text-sm text-gray-500">
+          Si quieres, deja una observación para el Comité Asesor (opcional — no la ve el estudiante).
+        </p>
+        <textarea
+          value={observaciones}
+          onChange={e => setObservaciones(e.target.value)}
+          rows={4}
+          placeholder="Ej. El estudiante ya cumple los requisitos de créditos..."
+          className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
+          autoFocus
+        />
+        <div className="flex gap-3 pt-2">
+          <button onClick={onCancelar}
+            className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={() => onConfirmar(observaciones.trim())}
+            className="flex-1 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800">
+            Confirmar aprobación
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FirmasCoordinador() {
   const router = useRouter();
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
@@ -71,6 +105,7 @@ export default function FirmasCoordinador() {
   const [pdfFirmado, setPdfFirmado]                 = useState<string | null>(null);
   const [procesando, setProcesando]                 = useState(false);
   const [mostrarModalRechazo, setMostrarModalRechazo] = useState(false);
+  const [mostrarModalAprobar, setMostrarModalAprobar] = useState(false);
   const visorRef     = useRef<HTMLDivElement>(null);
   const prevVisorUrl = useRef<string | null>(null);
 
@@ -122,8 +157,9 @@ export default function FirmasCoordinador() {
     mostrarEnVisor(b64);
   };
 
-  const handleAprobar = async () => {
+  const handleAprobar = async (observaciones: string) => {
     if (!seleccionada) return;
+    setMostrarModalAprobar(false);
     setProcesando(true); setError(null);
     try {
       const id = seleccionada.id_solicitud ?? seleccionada.id;
@@ -137,7 +173,7 @@ export default function FirmasCoordinador() {
       const res = await fetch(`${API_URL}/api/solicitudes/${id}/coordinador/accion`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ accion: "aprobar", motivo: "Aprobado por Coordinador de Posgrados" }),
+        body: JSON.stringify({ accion: "aprobar", observaciones: observaciones || undefined }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Error al aprobar");
       setExito("✅ Solicitud aprobada y enviada al Comité Asesor");
@@ -177,11 +213,14 @@ export default function FirmasCoordinador() {
   return (
     <>
       {mostrarFirmador && pdfB64 && (
-        <FirmadorPDF pdfBase64={pdfB64} soloVer={false}
+        <FirmadorPDF pdfBase64={pdfB64} soloVer={false} rolFirmante="coordinador"
           onFirmado={handleFirmado} onCerrar={() => setMostrarFirmador(false)} />
       )}
       {mostrarModalRechazo && (
         <ModalRechazo onConfirmar={handleRechazar} onCancelar={() => setMostrarModalRechazo(false)} />
+      )}
+      {mostrarModalAprobar && (
+        <ModalAprobar onConfirmar={handleAprobar} onCancelar={() => setMostrarModalAprobar(false)} />
       )}
 
       <div className="max-w-5xl mx-auto space-y-6">
@@ -267,13 +306,18 @@ export default function FirmasCoordinador() {
                       className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
                       ❌ Rechazar
                     </button>
-                    <button onClick={handleAprobar} disabled={procesando}
-                      className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60">
+                    <button onClick={() => setMostrarModalAprobar(true)} disabled={procesando || (!!pdfB64 && !pdfFirmado)}
+                      className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
                       {procesando
                         ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Procesando...</>
                         : <>✅ Aprobar y enviar al Comité</>}
                     </button>
                   </div>
+                  {!pdfFirmado && (
+                    <p className="text-xs text-amber-600 text-center">
+                      ⚠️ Debe firmar el documento antes de poder aprobar la solicitud
+                    </p>
+                  )}
                 </div>
 
                 {visorUrl && (
