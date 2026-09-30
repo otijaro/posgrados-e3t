@@ -49,6 +49,7 @@ export default function NotificacionesDirector() {
           est.solicitudes.forEach((s) => {
             if (s.estado === "enviada" || s.estado === "en_revision") {
               const tipoLabel: Record<string, string> = {
+                registrar_tema: "Registrar Tema",
                 credito_condonable: "Crédito Condonable",
                 prorroga: "Prórroga",
                 cambio_director: "Cambio de Director",

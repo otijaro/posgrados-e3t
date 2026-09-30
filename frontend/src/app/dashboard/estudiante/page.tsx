@@ -34,6 +34,20 @@ const estadoEstudianteLabel: Record<string, string> = {
   activo: "Activo", condicional: "Condicional", reserva: "Reserva",
   graduado: "Graduado", retirado: "Retirado", cancelado: "Cancelado",
 };
+const tipoSolicitudLabel: Record<string, string> = {
+  registrar_tema: "Registrar Tema",
+  cambio_titulo: "Cambio de Título",
+  cambio_director: "Cambio de Director",
+  credito_condonable: "Crédito Condonable",
+  prorroga: "Prórroga",
+  nombramiento_jurado: "Solicitud de Evaluación",
+  solicitud_grado: "Solicitud de Grado",
+  otra: "Otra",
+};
+const estadoSolicitudLabel: Record<string, string> = {
+  enviada: "Enviada", en_revision: "En Revisión", en_comite: "En Comité",
+  aprobada: "Aprobada", rechazada: "Rechazada", cancelada: "Cancelada",
+};
 
 export default function EstudianteDashboard() {
   const [user, setUser]               = useState<UserInfo | null>(null);
@@ -126,9 +140,9 @@ export default function EstudianteDashboard() {
               {solicitudes.map((s) => (
                 <tr key={s.radicado} className="hover:bg-gray-50">
                   <td className="py-3 font-mono text-xs text-gray-600">{s.radicado}</td>
-                  <td className="py-3 text-gray-800">{s.tipo}</td>
+                  <td className="py-3 text-gray-800">{tipoSolicitudLabel[s.tipo] ?? s.tipo}</td>
                   <td className="py-3 text-gray-500">{s.fecha}</td>
-                  <td className="py-3"><span className={`text-xs font-semibold px-3 py-1 rounded-full ${estadoColor[s.estado] ?? "bg-gray-100 text-gray-600"}`}>{s.estado}</span></td>
+                  <td className="py-3"><span className={`text-xs font-semibold px-3 py-1 rounded-full ${estadoColor[s.estado] ?? "bg-gray-100 text-gray-600"}`}>{estadoSolicitudLabel[s.estado] ?? s.estado}</span></td>
                 </tr>
               ))}
             </tbody>

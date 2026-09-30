@@ -165,6 +165,14 @@ function SolicitudesPendientesDirectorInner() {
     setTimeout(() => visorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   };
 
+  const descargarPDF = () => {
+    if (!visorUrl || !seleccionada) return;
+    const a = document.createElement("a");
+    a.href = visorUrl;
+    a.download = `${seleccionada.numero_radicado || "documento"}.pdf`;
+    a.click();
+  };
+
   const handleFirmado = (b64: string) => {
     setPdfFirmado(b64);
     setMostrarFirmador(false);
@@ -248,125 +256,124 @@ function SolicitudesPendientesDirectorInner() {
       )}
 
       <div className="max-w-5xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">✍️ Solicitudes por revisar</h1>
-          <p className="text-gray-500 text-sm mt-1">Solicitudes de sus estudiantes que esperan su revisión y firma</p>
-        </div>
-
-        {error  && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">⚠️ {error}</div>}
-        {exito  && <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">{exito}</div>}
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-          {/* Lista */}
-          <div className="space-y-3">
-            {solicitudes.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                <p className="text-4xl mb-3">✅</p>
-                <p className="text-gray-600 font-medium">Sin solicitudes pendientes</p>
-              </div>
-            ) : (
-              solicitudes.map(sol => {
-                const id = sol.id_solicitud ?? sol.id;
-                return (
-                  <button key={id} onClick={() => cargarPDF(sol)}
-                    className={`w-full text-left bg-white rounded-xl border p-4 hover:shadow-md transition-all ${
-                      (seleccionada?.id_solicitud ?? seleccionada?.id) === id
-                        ? "border-green-500 ring-2 ring-green-200"
-                        : "border-gray-200 hover:border-green-300"
-                    }`}>
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">📋</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-sm font-semibold text-gray-800 truncate">{sol.asunto || "Solicitud"}</p>
-                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ Pendiente</span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">👤 {sol.nombre_estudiante ?? sol.solicitante}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">📅 {(sol.fecha_envio ?? "")?.slice(0, 10)}</p>
-                        <p className="text-xs font-mono text-gray-400">{sol.numero_radicado}</p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          {/* Panel derecho */}
-          <div className="space-y-4">
-            {!seleccionada ? (
-              <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-10 text-center">
-                <p className="text-4xl mb-3">👈</p>
-                <p className="text-gray-500 text-sm">Selecciona una solicitud para revisarla</p>
-              </div>
-            ) : (
-              <>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
-                  <p className="text-sm font-bold text-gray-700">{seleccionada.asunto}</p>
-                  <p className="text-xs text-gray-500">👤 {seleccionada.nombre_estudiante ?? seleccionada.solicitante}</p>
-                  <p className="text-xs font-mono text-gray-400">{seleccionada.numero_radicado}</p>
-                </div>
-
-                {/* Botones de firma */}
-                <div className="flex gap-2">
-                  <button onClick={() => pdfB64 && mostrarEnVisor(pdfFirmado ?? pdfB64)}
-                    disabled={cargandoPdf || !pdfB64}
-                    className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-300 text-blue-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 disabled:opacity-60">
-                    {cargandoPdf ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Cargando...</> : <>👁️ Ver documento</>}
-                  </button>
-                  <button onClick={() => setMostrarFirmador(true)} disabled={!pdfB64}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">
-                    ✍️ {pdfFirmado ? "Editar firma" : "Firmar"}
-                  </button>
-                </div>
-
-                {pdfFirmado && (
-                  <p className="text-xs text-green-700 text-center bg-green-50 rounded-lg py-2 border border-green-200">
-                    ✅ Documento firmado
-                  </p>
-                )}
-
-                {/* Botones de decisión */}
-                <div className="border-t border-gray-200 pt-4 space-y-2">
-                  <p className="text-xs text-gray-500 font-medium text-center">Decisión sobre la solicitud</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setMostrarModalRechazo(true)} disabled={procesando}
-                      className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
-                      ❌ Rechazar
-                    </button>
-                    <button onClick={() => setMostrarModalAprobar(true)} disabled={procesando || (!!pdfB64 && !pdfFirmado)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
-                      {procesando
-                        ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Procesando...</>
-                        : <>✅ Aprobar y enviar</>}
-                    </button>
-                  </div>
-                  {!pdfFirmado && (
-                    <p className="text-xs text-amber-600 text-center">
-                      ⚠️ Debe firmar el documento antes de poder aprobar la solicitud
-                    </p>
-                  )}
-                </div>
-
-                {visorUrl && (
-                  <div ref={visorRef} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
-                      <span className="text-xs font-semibold text-gray-600">
-                        {pdfFirmado ? "✍️ Documento firmado" : "📄 Vista previa"}
-                      </span>
-                      <button onClick={() => setVisorUrl(null)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
-                    </div>
-                    <iframe src={visorUrl} className="w-full" style={{ height: "550px" }} title="PDF solicitud" />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
+      <div>
+      <h1 className="text-2xl font-bold text-gray-800">✍️ Solicitudes por revisar</h1>
+      <p className="text-gray-500 text-sm mt-1">Solicitudes de sus estudiantes que esperan su revisión y firma</p>
       </div>
-    </>
-  );
+
+      {error  && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">⚠️ {error}</div>}
+      {exito  && <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">{exito}</div>}
+
+      {!seleccionada ? (
+          // ── Sin solicitud elegida: mostrar la lista completa para escoger ──
+      solicitudes.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+        <p className="text-4xl mb-3">✅</p>
+      <p className="text-gray-600 font-medium">Sin solicitudes pendientes</p>
+      </div>
+      ) : (
+      <div className="space-y-3">
+        {solicitudes.map(sol => {
+        const id = sol.id_solicitud ?? sol.id;
+      return (
+        <button key={id} onClick={() => cargarPDF(sol)}
+        className="w-full text-left bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-green-300 transition-all">
+      <div className="flex items-start gap-3">
+      <span className="text-2xl">📋</span>
+      <div className="flex-1 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-gray-800 truncate">{sol.asunto || "Solicitud"}</p>
+            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ Pendiente</span>
+        </div>
+        <p className="text-xs text-gray-500 mt-1">👤 {sol.nombre_estudiante ?? sol.solicitante}</p>
+      <p className="text-xs text-gray-400 mt-0.5">📅 {(sol.fecha_envio ?? "")?.slice(0, 10)}</p>
+      <p className="text-xs font-mono text-gray-400">{sol.numero_radicado}</p>
+      </div>
+      </div>
+      </button>
+      );
+      })}
+      </div>
+      )
+      ) : (
+      // ── Solicitud elegida: encabezado con todo el detalle → documento → decisión ──
+      <div className="space-y-5">
+      {solicitudes.length > 1 && (
+          <button
+                onClick={() => { setSeleccionada(null); setPdfB64(null); setVisorUrl(null); setPdfFirmado(null); }}
+            className="text-sm text-gray-400 hover:text-green-700">
+            ← Volver a la lista
+        </button>
+      )}
+
+      {/* Encabezado con toda la info de la solicitud */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+        <p className="text-base font-bold text-gray-800">{seleccionada.asunto}</p>
+      <p className="text-sm text-gray-500 mt-1">👤 {seleccionada.nombre_estudiante ?? seleccionada.solicitante}</p>
+      </div>
+      <span className="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-medium whitespace-nowrap">⏳ Pendiente</span>
+      </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-gray-400">
+      <span className="font-mono">{seleccionada.numero_radicado}</span>
+      <span>📅 Enviada: {(seleccionada.fecha_envio ?? "")?.slice(0, 10)}</span>
+      </div>
+      </div>
+
+      {/* Documento: previsualización grande */}
+      <div ref={visorRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+      <span className="text-sm font-semibold text-gray-700">
+      {pdfFirmado ? "✍️ Documento firmado" : "📄 Documento"}
+      </span>
+      <div className="flex gap-2">
+                  <button onClick={descargarPDF}
+          disabled={cargandoPdf || !visorUrl}
+        className="flex items-center gap-2 bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50 disabled:opacity-60">
+      ⬇️ Descargar
+      </button>
+        <button onClick={() => setMostrarFirmador(true)} disabled={!pdfB64}
+                    className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-60">
+          ✍️ {pdfFirmado ? "Editar firma" : "Firmar"}
+        </button>
+      </div>
+      </div>
+      {visorUrl ? (
+      <iframe src={visorUrl} className="w-full" style={{ height: "720px" }} title="PDF solicitud" />
+      ) : (
+      <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+      {cargandoPdf ? "Cargando documento..." : "Sin documento cargado"}
+      </div>
+      )}
+      </div>
+
+      {/* Decisión */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+      <p className="text-xs text-gray-500 font-medium text-center">Decisión sobre la solicitud</p>
+      <div className="flex gap-3">
+      <button onClick={() => setMostrarModalRechazo(true)} disabled={procesando}
+      className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-3 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
+      ❌ Rechazar
+      </button>
+                <button onClick={() => setMostrarModalAprobar(true)} disabled={procesando || (!!pdfB64 && !pdfFirmado)}
+        className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
+      {procesando
+      ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Procesando...</>
+      : <>✅ Aprobar y enviar</>}
+      </button>
+      </div>
+      {!pdfFirmado && (
+      <p className="text-xs text-amber-600 text-center">
+      ⚠️ Debe firmar el documento antes de poder aprobar la solicitud
+      </p>
+      )}
+      </div>
+      </div>
+      )}
+      </div>
+      </>
+      );
 }
 
 export default function SolicitudesPendientesDirector() {

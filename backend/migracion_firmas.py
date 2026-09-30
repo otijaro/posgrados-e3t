@@ -68,5 +68,52 @@ with engine.connect() as conn:
     except Exception as e:
         print(f"⚠️  {e}")
 
+    # Agregar el valor 'REGISTRAR_TEMA' al ENUM tiposolicitud (antes 'Registrar Tema'
+    # compartía por error el mismo código que 'CAMBIO_TITULO'). Postgres guarda el
+    # NOMBRE de la constante de Python (mayúsculas), no su valor en minúscula.
+    try:
+        conn.execute(text("ALTER TYPE tiposolicitud ADD VALUE IF NOT EXISTS 'REGISTRAR_TEMA';"))
+        conn.commit()
+        print("✅ REGISTRAR_TEMA agregado al enum tiposolicitud")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  {e}")
+
+    # Reclasificar solicitudes viejas de Registrar Tema que quedaron guardadas
+    # como CAMBIO_TITULO (bug anterior), usando el marcador confiable que
+    # sí quedó guardado en datos_formulario.
+    try:
+        resultado = conn.execute(text(
+            "UPDATE solicitud SET tipo_solicitud = 'REGISTRAR_TEMA' "
+            "WHERE tipo_solicitud = 'CAMBIO_TITULO' "
+            "AND datos_formulario LIKE '%\"tipo\": \"registrar_tema\"%'"
+        ))
+        conn.commit()
+        if resultado.rowcount:
+            print(f"✅ {resultado.rowcount} solicitud(es) de Registrar Tema reclasificadas correctamente")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  {e}")
+
+    # Tabla de votos individuales del Comité Asesor (mínimo 4 de 7 para
+    # aprobar o rechazar una solicitud en comité).
+    try:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS voto_comite (
+                id SERIAL PRIMARY KEY,
+                id_solicitud INTEGER NOT NULL REFERENCES solicitud(id),
+                id_persona INTEGER NOT NULL REFERENCES persona(id),
+                decision VARCHAR(20) NOT NULL,
+                observaciones TEXT,
+                fecha TIMESTAMP NOT NULL DEFAULT NOW(),
+                UNIQUE(id_solicitud, id_persona)
+            );
+        """))
+        conn.commit()
+        print("✅ Tabla voto_comite lista")
+    except Exception as e:
+        conn.rollback()
+        print(f"⚠️  {e}")
+
     conn.commit()
     print("\n✅ Migración completada")

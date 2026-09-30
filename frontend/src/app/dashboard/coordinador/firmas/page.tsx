@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 
 const FirmadorPDF = dynamic(() => import("@/components/FirmadorPDF"), { ssr: false });
@@ -20,16 +20,14 @@ interface Solicitud {
   fecha_envio: string;
   solicitante: string;
   tipo_solicitud: string;
-  // del endpoint de firmas
   id_solicitud?: number;
   nombre_estudiante?: string;
   codigo_estudiante?: string;
+  fase?: "pendiente" | "en_comite" | "listo_para_firmar";
+  votos_comite?: { aprobar: number; rechazar: number; quorum: number } | null;
 }
 
-function ModalRechazo({ onConfirmar, onCancelar }: {
-  onConfirmar: (motivo: string) => void;
-  onCancelar: () => void;
-}) {
+function ModalRechazo({ onConfirmar, onCancelar }: { onConfirmar: (motivo: string) => void; onCancelar: () => void }) {
   const [motivo, setMotivo] = useState("");
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -56,7 +54,6 @@ function ModalRechazo({ onConfirmar, onCancelar }: {
   );
 }
 
-// Modal de aprobación con observaciones
 function ModalAprobar({ onConfirmar, onCancelar }: { onConfirmar: (observaciones: string) => void; onCancelar: () => void }) {
   const [observaciones, setObservaciones] = useState("");
   return (
@@ -90,8 +87,10 @@ function ModalAprobar({ onConfirmar, onCancelar }: { onConfirmar: (observaciones
   );
 }
 
-export default function FirmasCoordinador() {
+function FirmasCoordinadorInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const idFocalizada = searchParams.get("id");
   const [solicitudes, setSolicitudes] = useState<Solicitud[]>([]);
   const [cargando, setCargando]       = useState(true);
   const [error, setError]             = useState<string | null>(null);
@@ -111,10 +110,16 @@ export default function FirmasCoordinador() {
 
   const cargarSolicitudes = () => {
     setCargando(true);
-    // Cargar desde el nuevo endpoint de flujo
     fetch(`${API_URL}/api/solicitudes/pendientes/coordinador`, { headers: authHeaders() })
       .then(r => r.ok ? r.json() : [])
-      .then(data => setSolicitudes(Array.isArray(data) ? data : []))
+      .then(data => {
+        const lista = Array.isArray(data) ? data : [];
+        setSolicitudes(lista);
+        if (idFocalizada) {
+          const encontrada = lista.find((s: Solicitud) => String(s.id_solicitud ?? s.id) === idFocalizada);
+          if (encontrada) cargarPDF(encontrada);
+        }
+      })
       .catch(() => setError("No se pudieron cargar las solicitudes"))
       .finally(() => setCargando(false));
   };
@@ -151,6 +156,14 @@ export default function FirmasCoordinador() {
     setTimeout(() => visorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
   };
 
+  const descargarPDF = () => {
+    if (!visorUrl || !seleccionada) return;
+    const a = document.createElement("a");
+    a.href = visorUrl;
+    a.download = `${seleccionada.numero_radicado || "documento"}.pdf`;
+    a.click();
+  };
+
   const handleFirmado = (b64: string) => {
     setPdfFirmado(b64);
     setMostrarFirmador(false);
@@ -163,6 +176,7 @@ export default function FirmasCoordinador() {
     setProcesando(true); setError(null);
     try {
       const id = seleccionada.id_solicitud ?? seleccionada.id;
+      const esFirmaFinal = seleccionada.fase === "listo_para_firmar";
       if (pdfFirmado) {
         await fetch(`${API_URL}/api/firmas/guardar-firmado`, {
           method: "POST",
@@ -170,13 +184,15 @@ export default function FirmasCoordinador() {
           body: JSON.stringify({ id_solicitud: id, pdf_base64: pdfFirmado, rol_firmante: "coordinador" }),
         });
       }
-      const res = await fetch(`${API_URL}/api/solicitudes/${id}/coordinador/accion`, {
+      const endpoint = esFirmaFinal ? "aprobar-final" : "accion";
+      const bodyExtra = esFirmaFinal ? {} : {};
+      const res = await fetch(`${API_URL}/api/solicitudes/${id}/coordinador/${endpoint}`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ accion: "aprobar", observaciones: observaciones || undefined }),
+        body: JSON.stringify({ accion: "aprobar", observaciones: observaciones || undefined, ...bodyExtra }),
       });
       if (!res.ok) throw new Error((await res.json()).detail || "Error al aprobar");
-      setExito("✅ Solicitud aprobada y enviada al Comité Asesor");
+      setExito(esFirmaFinal ? "✅ Solicitud aprobada definitivamente" : "✅ Solicitud pasada al Comité Asesor");
       setSolicitudes(prev => prev.filter(s => (s.id_solicitud ?? s.id) !== id));
       setSeleccionada(null); setPdfB64(null); setVisorUrl(null); setPdfFirmado(null);
     } catch (e: any) {
@@ -190,7 +206,9 @@ export default function FirmasCoordinador() {
     setProcesando(true); setError(null);
     try {
       const id = seleccionada.id_solicitud ?? seleccionada.id;
-      const res = await fetch(`${API_URL}/api/solicitudes/${id}/coordinador/accion`, {
+      const esFirmaFinal = seleccionada.fase === "listo_para_firmar";
+      const endpoint = esFirmaFinal ? "aprobar-final" : "accion";
+      const res = await fetch(`${API_URL}/api/solicitudes/${id}/coordinador/${endpoint}`, {
         method: "POST",
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ accion: "rechazar", motivo }),
@@ -226,91 +244,136 @@ export default function FirmasCoordinador() {
       <div className="max-w-5xl mx-auto space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">✍️ Por firmar — Coordinador</h1>
-          <p className="text-gray-500 text-sm mt-1">Solicitudes aprobadas por el director que requieren su revisión y decisión</p>
+          <p className="text-gray-500 text-sm mt-1">Solicitudes que requieren su revisión y decisión</p>
         </div>
 
         {error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">⚠️ {error}</div>}
         {exito && <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">{exito}</div>}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Lista */}
-          <div className="space-y-3">
-            {solicitudes.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
-                <p className="text-4xl mb-3">✅</p>
-                <p className="text-gray-600 font-medium">Sin solicitudes pendientes</p>
-              </div>
-            ) : (
-              solicitudes.map(sol => {
+        {!seleccionada ? (
+          solicitudes.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-10 text-center">
+              <p className="text-4xl mb-3">✅</p>
+              <p className="text-gray-600 font-medium">Sin solicitudes pendientes</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {solicitudes.map(sol => {
                 const id = sol.id_solicitud ?? sol.id;
+                const esObservando = sol.fase === "en_comite";
+                const esListaFirmar = sol.fase === "listo_para_firmar";
                 return (
                   <button key={id} onClick={() => cargarPDF(sol)}
-                    className={`w-full text-left bg-white rounded-xl border p-4 hover:shadow-md transition-all ${
-                      (seleccionada?.id_solicitud ?? seleccionada?.id) === id
-                        ? "border-green-500 ring-2 ring-green-200"
-                        : "border-gray-200 hover:border-green-300"
-                    }`}>
+                    className="w-full text-left bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md hover:border-green-300 transition-all">
                     <div className="flex items-start gap-3">
                       <span className="text-2xl">📋</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-sm font-semibold text-gray-800 truncate">{sol.asunto}</p>
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ En revisión</span>
+                          {esObservando && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full whitespace-nowrap">👁️ En votación del comité</span>}
+                          {esListaFirmar && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full whitespace-nowrap">✅ Listo para firmar</span>}
+                          {!esObservando && !esListaFirmar && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ Por decidir</span>}
                         </div>
                         <p className="text-xs text-gray-500 mt-1">👤 {sol.nombre_estudiante ?? sol.solicitante}</p>
                         <p className="text-xs text-gray-400 mt-0.5">📅 {(sol.fecha_envio ?? "")?.slice(0, 10)}</p>
                         <p className="text-xs font-mono text-gray-400">{sol.numero_radicado}</p>
+                        {sol.votos_comite && (
+                          <p className="text-xs font-semibold text-purple-600 mt-1">
+                            🗳️ {sol.votos_comite.aprobar} a favor · {sol.votos_comite.rechazar} en contra (de {sol.votos_comite.quorum} necesarios)
+                          </p>
+                        )}
                       </div>
                     </div>
                   </button>
                 );
-              })
+              })}
+            </div>
+          )
+        ) : (
+          <div className="space-y-5">
+            {solicitudes.length > 1 && (
+              <button onClick={() => { setSeleccionada(null); setPdfB64(null); setVisorUrl(null); setPdfFirmado(null); }}
+                className="text-sm text-gray-400 hover:text-green-700">
+                ← Volver a la lista
+              </button>
             )}
-          </div>
 
-          {/* Panel detalle */}
-          <div className="space-y-4">
-            {!seleccionada ? (
-              <div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-10 text-center">
-                <p className="text-4xl mb-3">👈</p>
-                <p className="text-gray-500 text-sm">Selecciona una solicitud para revisarla</p>
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <p className="text-base font-bold text-gray-800">{seleccionada.asunto}</p>
+                  <p className="text-sm text-gray-500 mt-1">👤 {seleccionada.nombre_estudiante ?? seleccionada.solicitante}</p>
+                </div>
+                {seleccionada.fase === "en_comite" && (
+                  <span className="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-medium whitespace-nowrap">👁️ En votación del comité</span>
+                )}
+                {seleccionada.fase === "listo_para_firmar" && (
+                  <span className="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full font-medium whitespace-nowrap">✅ Listo para firmar</span>
+                )}
+                {(!seleccionada.fase || seleccionada.fase === "pendiente") && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-medium whitespace-nowrap">⏳ Por decidir</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 text-xs text-gray-400">
+                <span className="font-mono">{seleccionada.numero_radicado}</span>
+                <span>📅 Enviada: {(seleccionada.fecha_envio ?? "")?.slice(0, 10)}</span>
+              </div>
+            </div>
+
+            {seleccionada.fase === "en_comite" ? (
+              // ── Solo observando: la decisión está en manos del comité ──
+              <div className="bg-purple-50 border border-purple-200 rounded-xl p-6 text-center space-y-2">
+                <p className="text-4xl">🗳️</p>
+                <p className="text-sm font-semibold text-purple-800">Esperando la votación del Comité Asesor</p>
+                {seleccionada.votos_comite && (
+                  <p className="text-sm text-purple-700">
+                    {seleccionada.votos_comite.aprobar} a favor · {seleccionada.votos_comite.rechazar} en contra
+                    {" "}(se necesitan {seleccionada.votos_comite.quorum} de 7 para decidir)
+                  </p>
+                )}
+                <p className="text-xs text-purple-500">Cuando el comité complete la votación, podrás firmar y cerrar la solicitud aquí mismo.</p>
               </div>
             ) : (
               <>
-                <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
-                  <p className="text-sm font-bold text-gray-700">{seleccionada.asunto}</p>
-                  <p className="text-xs text-gray-500">👤 {seleccionada.nombre_estudiante ?? seleccionada.solicitante}</p>
-                  <p className="text-xs font-mono text-gray-400">{seleccionada.numero_radicado}</p>
+                <div ref={visorRef} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-100">
+                    <span className="text-sm font-semibold text-gray-700">
+                      {pdfFirmado ? "✍️ Documento firmado" : "📄 Documento"}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={descargarPDF} disabled={cargandoPdf || !visorUrl}
+                        className="flex items-center gap-2 bg-white border border-blue-300 text-blue-700 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-50 disabled:opacity-60">
+                        ⬇️ Descargar
+                      </button>
+                      <button onClick={() => setMostrarFirmador(true)} disabled={!pdfB64}
+                        className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-60">
+                        ✍️ {pdfFirmado ? "Editar firma" : "Firmar"}
+                      </button>
+                    </div>
+                  </div>
+                  {visorUrl ? (
+                    <iframe src={visorUrl} className="w-full" style={{ height: "720px" }} title="PDF solicitud" />
+                  ) : (
+                    <div className="flex items-center justify-center h-40 text-gray-400 text-sm">
+                      {cargandoPdf ? "Cargando documento..." : "Sin documento cargado"}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex gap-2">
-                  <button onClick={() => pdfB64 && mostrarEnVisor(pdfFirmado ?? pdfB64)}
-                    disabled={cargandoPdf || !pdfB64}
-                    className="flex-1 flex items-center justify-center gap-2 bg-white border border-blue-300 text-blue-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-50 disabled:opacity-60">
-                    {cargandoPdf ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Cargando...</> : <>👁️ Ver documento</>}
-                  </button>
-                  <button onClick={() => setMostrarFirmador(true)} disabled={!pdfB64}
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">
-                    ✍️ {pdfFirmado ? "Editar firma" : "Firmar"}
-                  </button>
-                </div>
-
-                {pdfFirmado && (
-                  <p className="text-xs text-green-700 text-center bg-green-50 rounded-lg py-2 border border-green-200">✅ Documento firmado</p>
-                )}
-
-                <div className="border-t border-gray-200 pt-4 space-y-2">
-                  <p className="text-xs text-gray-500 font-medium text-center">Decisión sobre la solicitud</p>
-                  <div className="flex gap-2">
+                <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+                  <p className="text-xs text-gray-500 font-medium text-center">
+                    {seleccionada.fase === "listo_para_firmar" ? "Aprobación final" : "Decisión sobre la solicitud"}
+                  </p>
+                  <div className="flex gap-3">
                     <button onClick={() => setMostrarModalRechazo(true)} disabled={procesando}
-                      className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
+                      className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-3 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
                       ❌ Rechazar
                     </button>
                     <button onClick={() => setMostrarModalAprobar(true)} disabled={procesando || (!!pdfB64 && !pdfFirmado)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
+                      className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-3 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60 disabled:cursor-not-allowed">
                       {procesando
                         ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Procesando...</>
-                        : <>✅ Aprobar y enviar al Comité</>}
+                        : seleccionada.fase === "listo_para_firmar" ? <>✅ Aprobar definitivamente</> : <>✅ Aprobar y enviar al Comité</>}
                     </button>
                   </div>
                   {!pdfFirmado && (
@@ -319,23 +382,19 @@ export default function FirmasCoordinador() {
                     </p>
                   )}
                 </div>
-
-                {visorUrl && (
-                  <div ref={visorRef} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
-                      <span className="text-xs font-semibold text-gray-600">
-                        {pdfFirmado ? "✍️ Documento firmado" : "📄 Vista previa"}
-                      </span>
-                      <button onClick={() => setVisorUrl(null)} className="text-xs text-gray-400 hover:text-red-500">✕</button>
-                    </div>
-                    <iframe src={visorUrl} className="w-full" style={{ height: "550px" }} title="PDF solicitud" />
-                  </div>
-                )}
               </>
             )}
           </div>
-        </div>
+        )}
       </div>
     </>
+  );
+}
+
+export default function FirmasCoordinador() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-green-700 border-t-transparent rounded-full animate-spin" /></div>}>
+      <FirmasCoordinadorInner />
+    </Suspense>
   );
 }

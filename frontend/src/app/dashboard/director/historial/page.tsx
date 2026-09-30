@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getMisEstudiantes, SolicitudDirectorInfo } from "@/lib/api";
 
 const tipoLabel: Record<string, string> = {
+  registrar_tema: "Registrar Tema",
   credito_condonable: "Crédito Condonable",
   prorroga: "Prórroga",
   cambio_director: "Cambio de Director",
@@ -116,7 +117,10 @@ export default function HistorialSolicitudesDirector() {
         ) : (
           <div className="divide-y divide-gray-100">
             {filtradas.map((f) => (
-              <Link key={f.id} href={`/dashboard/director/solicitudes/${f.id}`}
+              <Link key={f.id}
+                href={f.estado === "enviada"
+                  ? `/dashboard/director/solicitudes?id=${f.id}`
+                  : `/dashboard/director/solicitudes/${f.id}`}
                 className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">

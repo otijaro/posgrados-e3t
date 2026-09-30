@@ -32,6 +32,17 @@ const estadoLabel: Record<string, string> = {
   cancelada:   "Cancelada",
 };
 
+const tipoSolicitudLabel: Record<string, string> = {
+  registrar_tema: "Registrar Tema",
+  cambio_titulo: "Cambio de Título",
+  cambio_director: "Cambio de Director",
+  credito_condonable: "Crédito Condonable",
+  prorroga: "Prórroga",
+  nombramiento_jurado: "Solicitud de Evaluación",
+  solicitud_grado: "Solicitud de Grado",
+  otra: "Otra",
+};
+
 interface Solicitud {
   id: number;
   numero_radicado: string;
@@ -130,7 +141,7 @@ export default function SolicitudesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="font-mono text-xs text-gray-400">{s.numero_radicado}</span>
-                      <span className="text-xs text-gray-400">{s.tipo_solicitud}</span>
+                      <span className="text-xs text-gray-400">{tipoSolicitudLabel[s.tipo_solicitud] ?? s.tipo_solicitud}</span>
                       <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${estadoColor[s.estado] ?? "bg-gray-100 text-gray-600"}`}>
                         {estadoLabel[s.estado] ?? s.estado}
                       </span>

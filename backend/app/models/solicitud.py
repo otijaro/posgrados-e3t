@@ -13,6 +13,7 @@ class TipoSolicitud(str, enum.Enum):
     PRORROGA = "prorroga"
     CAMBIO_DIRECTOR = "cambio_director"
     CAMBIO_TITULO = "cambio_titulo"
+    REGISTRAR_TEMA = "registrar_tema"
     REINGRESO = "reingreso"
     RETIRO_MATERIA = "retiro_materia"
     VALIDACION_MATERIA = "validacion_materia"
