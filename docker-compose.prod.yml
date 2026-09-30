@@ -50,7 +50,7 @@ services:
     image: juliamdiaz09/posgrados-frontend:latest
     container_name: posgrados_frontend
     ports:
-      - "3000:3000"
+      - "3001:3000"
     depends_on:
       - backend
     restart: unless-stopped
