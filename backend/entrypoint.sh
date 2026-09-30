@@ -29,6 +29,7 @@ echo "📚 Cargando seeds..."
 python3 seed_profesores_2026.py    2>&1 | tail -3
 python3 seed_estudiantes_2026.py   2>&1 | tail -3
 python3 seed_coordinador.py        2>&1 | tail -3
+python3 seed_comite.py             2>&1 | tail -5
 python3 seed_secretaria.py         2>&1 | tail -3
 python3 migracion_firmas.py        2>&1 | tail -3
 python3 migracion_dir_grupo.py     2>&1 | tail -3

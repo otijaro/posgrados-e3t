@@ -71,15 +71,38 @@ def _crear_flujo_director(db: Session, id_solicitud: int):
 def _crear_flujo_coordinador(db: Session, id_solicitud: int):
     """Crea el paso de aprobación del coordinador."""
     db.add(FlujoAprobacion(
-        id_solicitud=id_solicitud, orden=2,
+        id_solicitud=id_solicitud, orden=3,
         nivel=NivelAprobacion.COORDINADOR, rol_responsable="coordinador",
+        estado="pendiente", fecha_recepcion=datetime.utcnow()
+    ))
+
+def _tiene_director_grupo(db: Session, id_solicitud: int) -> bool:
+    """¿El proyecto de esta solicitud tiene un grupo de investigación con
+    director asignado? Si no, se salta el paso de aval del director de grupo."""
+    row = db.execute(text("""
+        SELECT gi.id_director
+        FROM solicitud s
+        JOIN persona p ON p.id = s.id_solicitante
+        JOIN estudiante e ON e.id_persona = p.id
+        JOIN proyecto_grado pg ON pg.id_estudiante = e.id
+        JOIN grupo_investigacion gi ON gi.id = pg.id_grupo_inv
+        WHERE s.id = :id AND gi.id_director IS NOT NULL
+    """), {"id": id_solicitud}).fetchone()
+    return bool(row)
+
+def _crear_flujo_dir_grupo(db: Session, id_solicitud: int):
+    """Crea el paso de aval del Director del Grupo de Investigación,
+    intermedio entre el Director de tesis y el Coordinador."""
+    db.add(FlujoAprobacion(
+        id_solicitud=id_solicitud, orden=2,
+        nivel=NivelAprobacion.DIRECTOR, rol_responsable="dir_grupo",
         estado="pendiente", fecha_recepcion=datetime.utcnow()
     ))
 
 def _crear_flujo_comite(db: Session, id_solicitud: int):
     """Crea el paso de aprobación del comité."""
     db.add(FlujoAprobacion(
-        id_solicitud=id_solicitud, orden=3,
+        id_solicitud=id_solicitud, orden=4,
         nivel=NivelAprobacion.COMITE, rol_responsable="comite",
         estado="pendiente", fecha_recepcion=datetime.utcnow()
     ))
@@ -138,13 +161,17 @@ def _verificar_propietario_editable(solicitud_id: int, persona_id: int, db: Sess
 def _armar_registrar_tema(persona, estudiante, director, director_correo, titulo,
                            objetivo_general, descripcion_alcances, linea_estrategica,
                            grupo_investigacion, area_formacion, codirector,
-                           codirector_correo, codirector_cargo, codirector_entidad):
+                           codirector_correo, codirector_cargo, codirector_entidad,
+                           director_cargo=None, director_entidad=None):
+    director_info = f"{director} ({director_correo})"
+    if director_cargo or director_entidad:
+        director_info += f" — {director_cargo or ''} {('· ' + director_entidad) if director_entidad else ''}".rstrip()
     codirector_info = f"\nCodirector: {codirector} ({codirector_correo or 'sin correo'})" if codirector else ""
     asunto = f"Registro de tema: {titulo[:100]}"
     descripcion = (
         f"Estudiante: {persona.nombre_completo} (Código: {estudiante.codigo_estudiante})\n"
         f"Programa: {estudiante.programa.nombre if estudiante.programa else '—'}\n\n"
-        f"Director: {director} ({director_correo}){codirector_info}\n\n"
+        f"Director: {director_info}{codirector_info}\n\n"
         f"Título: {titulo}\n\n"
         f"Objetivo General:\n{objetivo_general}\n\n"
         f"Alcances:\n{descripcion_alcances or '—'}\n\n"
@@ -154,6 +181,7 @@ def _armar_registrar_tema(persona, estudiante, director, director_correo, titulo
     )
     datos = {
         "tipo": "registrar_tema", "director": director, "director_correo": director_correo,
+        "director_cargo": director_cargo, "director_entidad": director_entidad,
         "titulo": titulo, "objetivo_general": objetivo_general,
         "descripcion_alcances": descripcion_alcances, "linea_estrategica": linea_estrategica,
         "grupo_investigacion": grupo_investigacion, "area_formacion": area_formacion,
@@ -363,10 +391,43 @@ def pendientes_director(token: str = Depends(oauth2_scheme), db: Session = Depen
         for s in solicitudes
     ]
 
+@router.get("/pendientes/dir-grupo")
+def pendientes_dir_grupo(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    """Solicitudes que esperan el aval del Director del Grupo de Investigación
+    (solo las de SU propio grupo)."""
+    persona = _get_persona_autenticada(token, db)
+    rows = db.execute(text("""
+        SELECT s.id, s.numero_radicado, s.tipo_solicitud, s.asunto, s.estado, s.fecha_envio,
+               p.nombre_completo AS solicitante
+        FROM flujo_aprobacion fa
+        JOIN solicitud s ON s.id = fa.id_solicitud
+        JOIN persona p ON p.id = s.id_solicitante
+        JOIN estudiante e ON e.id_persona = p.id
+        JOIN proyecto_grado pg ON pg.id_estudiante = e.id
+        JOIN grupo_investigacion gi ON gi.id = pg.id_grupo_inv
+        WHERE fa.rol_responsable = 'dir_grupo' AND fa.estado = 'pendiente'
+          AND s.estado = 'EN_REVISION' AND gi.id_director = :persona_id
+        ORDER BY s.fecha_envio DESC
+    """), {"persona_id": persona.id}).fetchall()
+    return [
+        {
+            "id":              r.id,
+            "numero_radicado": r.numero_radicado,
+            "tipo_solicitud":  r.tipo_solicitud,
+            "asunto":          r.asunto,
+            "estado":          r.estado,
+            "fecha_envio":     str(r.fecha_envio)[:10] if r.fecha_envio else None,
+            "solicitante":     r.solicitante,
+        }
+        for r in rows
+    ]
+
 @router.get("/pendientes/coordinador")
 def pendientes_coordinador(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    _get_persona_autenticada(token, db)
-    solicitudes = (
+    persona = _get_persona_autenticada(token, db)
+
+    # 1. Solicitudes que el coordinador debe decidir (pasar a comité, o rechazar)
+    pendientes = (
         db.query(Solicitud)
         .join(FlujoAprobacion, FlujoAprobacion.id_solicitud == Solicitud.id)
         .filter(
@@ -377,8 +438,42 @@ def pendientes_coordinador(token: str = Depends(oauth2_scheme), db: Session = De
         .order_by(Solicitud.fecha_envio.desc())
         .all()
     )
-    return [
-        {
+
+    # 2. Solicitudes en votación del comité — el coordinador solo observa
+    en_comite = (
+        db.query(Solicitud)
+        .join(FlujoAprobacion, FlujoAprobacion.id_solicitud == Solicitud.id)
+        .filter(
+            FlujoAprobacion.rol_responsable == "comite",
+            FlujoAprobacion.estado == "pendiente",
+            Solicitud.estado == EstadoSolicitud.EN_COMITE,
+        )
+        .order_by(Solicitud.fecha_envio.desc())
+        .all()
+    )
+
+    # 3. Solicitudes que el comité ya aprobó y esperan la firma final del coordinador
+    listas_firmar = (
+        db.query(Solicitud)
+        .join(FlujoAprobacion, FlujoAprobacion.id_solicitud == Solicitud.id)
+        .filter(
+            FlujoAprobacion.rol_responsable == "coordinador_final",
+            FlujoAprobacion.estado == "pendiente",
+            Solicitud.estado == EstadoSolicitud.EN_COMITE,
+        )
+        .order_by(Solicitud.fecha_envio.desc())
+        .all()
+    )
+
+    def _serializar(s: Solicitud, fase: str) -> dict:
+        votos = None
+        if fase == "en_comite":
+            conteo = db.execute(text(
+                "SELECT decision, COUNT(*) as n FROM voto_comite WHERE id_solicitud = :sol GROUP BY decision"
+            ), {"sol": s.id}).fetchall()
+            v = {row.decision: row.n for row in conteo}
+            votos = {"aprobar": v.get("aprobar", 0), "rechazar": v.get("rechazar", 0), "quorum": QUORUM_COMITE}
+        return {
             "id":              s.id,
             "numero_radicado": s.numero_radicado,
             "tipo_solicitud":  s.tipo_solicitud.value,
@@ -386,9 +481,15 @@ def pendientes_coordinador(token: str = Depends(oauth2_scheme), db: Session = De
             "estado":          s.estado.value,
             "fecha_envio":     s.fecha_envio.strftime("%Y-%m-%d") if s.fecha_envio else None,
             "solicitante":     s.solicitante.nombre_completo if s.solicitante else "—",
+            "fase":            fase,  # "pendiente" | "en_comite" (solo lectura) | "listo_para_firmar"
+            "votos_comite":    votos,
         }
-        for s in solicitudes
-    ]
+
+    return (
+        [_serializar(s, "pendiente") for s in pendientes]
+        + [_serializar(s, "listo_para_firmar") for s in listas_firmar]
+        + [_serializar(s, "en_comite") for s in en_comite]
+    )
 
 @router.get("/historial/comite")
 def historial_comite(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -408,30 +509,41 @@ def historial_comite(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 @router.get("/pendientes/comite")
 def pendientes_comite(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    _get_persona_autenticada(token, db)
-    solicitudes = (
-        db.query(Solicitud)
-        .join(FlujoAprobacion, FlujoAprobacion.id_solicitud == Solicitud.id)
-        .filter(
-            FlujoAprobacion.rol_responsable == "comite",
-            FlujoAprobacion.estado == "pendiente",
-            Solicitud.estado == EstadoSolicitud.EN_COMITE,
-        )
-        .order_by(Solicitud.fecha_envio.desc())
-        .all()
-    )
-    return [
-        {
-            "id":              s.id,
-            "numero_radicado": s.numero_radicado,
-            "tipo_solicitud":  s.tipo_solicitud.value,
-            "asunto":          s.asunto,
-            "estado":          s.estado.value,
-            "fecha_envio":     s.fecha_envio.strftime("%Y-%m-%d") if s.fecha_envio else None,
-            "solicitante":     s.solicitante.nombre_completo if s.solicitante else "—",
-        }
-        for s in solicitudes
-    ]
+    persona = _get_persona_autenticada(token, db)
+    rows = db.execute(text("""
+        SELECT s.id, s.numero_radicado, s.tipo_solicitud, s.asunto, s.estado, s.fecha_envio,
+               p.nombre_completo AS solicitante
+        FROM flujo_aprobacion fa
+        JOIN solicitud s ON s.id = fa.id_solicitud
+        JOIN persona p ON p.id = s.id_solicitante
+        WHERE fa.rol_responsable = 'comite' AND fa.estado = 'pendiente'
+          AND s.estado = 'EN_COMITE'
+          AND NOT EXISTS (
+              SELECT 1 FROM voto_comite vc
+              WHERE vc.id_solicitud = s.id AND vc.id_persona = :persona_id
+          )
+        ORDER BY s.fecha_envio DESC
+    """), {"persona_id": persona.id}).fetchall()
+
+    resultado = []
+    for r in rows:
+        conteo = db.execute(text(
+            "SELECT decision, COUNT(*) as n FROM voto_comite WHERE id_solicitud = :sol GROUP BY decision"
+        ), {"sol": r.id}).fetchall()
+        v = {row.decision: row.n for row in conteo}
+        resultado.append({
+            "id":              r.id,
+            "numero_radicado": r.numero_radicado,
+            "tipo_solicitud":  r.tipo_solicitud,
+            "asunto":          r.asunto,
+            "estado":          r.estado,
+            "fecha_envio":     str(r.fecha_envio)[:10] if r.fecha_envio else None,
+            "solicitante":     r.solicitante,
+            "votos_aprobar":   v.get("aprobar", 0),
+            "votos_rechazar":  v.get("rechazar", 0),
+            "quorum":          QUORUM_COMITE,
+        })
+    return resultado
 
 # ── POST acción del director ──────────────────────────────────────────────────
 
@@ -503,7 +615,13 @@ def director_accion(
         s.estado = EstadoSolicitud.EN_REVISION
         s.id_quien_responde = persona.id
         _agregar_observacion(s, "director", body.observaciones)
-        _crear_flujo_coordinador(db, solicitud_id)
+
+        # Si el proyecto tiene un grupo de investigación con director asignado,
+        # primero debe avalar/firmar él antes de llegar al coordinador.
+        if _tiene_director_grupo(db, solicitud_id):
+            _crear_flujo_dir_grupo(db, solicitud_id)
+        else:
+            _crear_flujo_coordinador(db, solicitud_id)
 
     elif body.accion == "rechazar":
         if not body.motivo:
@@ -520,6 +638,64 @@ def director_accion(
 
     db.commit()
     return {"mensaje": f"Solicitud {body.accion}da por el director", "estado": s.estado.value}
+
+# ── POST acción del Director de Grupo de Investigación ────────────────────
+
+@router.post("/{solicitud_id}/dir-grupo/accion")
+def dir_grupo_accion(
+    solicitud_id: int,
+    body: AccionBody,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    persona = _get_persona_autenticada(token, db)
+    s = db.query(Solicitud).filter(Solicitud.id == solicitud_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    if s.estado != EstadoSolicitud.EN_REVISION:
+        raise HTTPException(status_code=400, detail="La solicitud no está pendiente del director de grupo")
+
+    flujo = db.query(FlujoAprobacion).filter(
+        FlujoAprobacion.id_solicitud == solicitud_id,
+        FlujoAprobacion.rol_responsable == "dir_grupo",
+        FlujoAprobacion.estado == "pendiente"
+    ).first()
+    if not flujo:
+        raise HTTPException(status_code=404, detail="No hay flujo pendiente para el director de grupo")
+
+    if body.accion == "aprobar":
+        if s.documentos_adjuntos and not body.documento_firmado:
+            firma = db.execute(
+                text("SELECT firmado_dir_grupo FROM documento_firma WHERE id_solicitud = :id"),
+                {"id": solicitud_id}
+            ).fetchone()
+            if not firma or not firma[0]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Debe avalar/firmar el documento antes de poder aprobar"
+                )
+
+        flujo.estado          = "aprobado"
+        flujo.fecha_respuesta = datetime.utcnow()
+        flujo.comentarios     = body.motivo
+        _agregar_observacion(s, "director de grupo", body.observaciones)
+        _crear_flujo_coordinador(db, solicitud_id)
+
+    elif body.accion == "rechazar":
+        if not body.motivo:
+            raise HTTPException(status_code=400, detail="Debe indicar el motivo de rechazo")
+        flujo.estado          = "rechazado"
+        flujo.fecha_respuesta = datetime.utcnow()
+        flujo.comentarios     = body.motivo
+        s.estado              = EstadoSolicitud.RECHAZADA
+        s.respuesta           = body.motivo
+        s.id_quien_responde   = persona.id
+        s.fecha_rechazo       = datetime.utcnow()
+    else:
+        raise HTTPException(status_code=400, detail="Acción inválida")
+
+    db.commit()
+    return {"mensaje": f"Solicitud {body.accion}da por el director de grupo", "estado": s.estado.value}
 
 # ── POST acción del coordinador ───────────────────────────────────────────────
 
@@ -583,6 +759,10 @@ def coordinador_accion(
 
 # ── POST acción del comité ────────────────────────────────────────────────────
 
+# ── POST voto individual del comité (mínimo 4 de 7 para decidir) ────────────
+
+QUORUM_COMITE = 4
+
 @router.post("/{solicitud_id}/comite/accion")
 def comite_accion(
     solicitud_id: int,
@@ -603,16 +783,131 @@ def comite_accion(
         FlujoAprobacion.estado == "pendiente"
     ).first()
     if not flujo:
-        raise HTTPException(status_code=404, detail="No hay flujo pendiente para el comité")
+        raise HTTPException(status_code=404, detail="No hay votación abierta para el comité en esta solicitud")
+
+    if body.accion not in ("aprobar", "rechazar"):
+        raise HTTPException(status_code=400, detail="Acción inválida")
+
+    ya_voto = db.execute(
+        text("SELECT id FROM voto_comite WHERE id_solicitud = :sol AND id_persona = :per"),
+        {"sol": solicitud_id, "per": persona.id}
+    ).fetchone()
+    if ya_voto:
+        raise HTTPException(status_code=400, detail="Ya registraste tu voto para esta solicitud")
+
+    if body.accion == "rechazar" and not body.motivo:
+        raise HTTPException(status_code=400, detail="Debe indicar el motivo de su voto de rechazo")
+
+    db.execute(text(
+        "INSERT INTO voto_comite (id_solicitud, id_persona, decision, observaciones) "
+        "VALUES (:sol, :per, :dec, :obs)"
+    ), {
+        "sol": solicitud_id, "per": persona.id, "dec": body.accion,
+        "obs": body.motivo or body.observaciones,
+    })
+
+    conteo = db.execute(text(
+        "SELECT decision, COUNT(*) as n FROM voto_comite WHERE id_solicitud = :sol GROUP BY decision"
+    ), {"sol": solicitud_id}).fetchall()
+    votos = {row.decision: row.n for row in conteo}
+    aprobar_n = votos.get("aprobar", 0)
+    rechazar_n = votos.get("rechazar", 0)
+
+    resultado = "pendiente"
+    if aprobar_n >= QUORUM_COMITE:
+        # Comité aprobó colegiadamente. El coordinador debe firmar para cerrar.
+        flujo.estado          = "aprobado"
+        flujo.fecha_respuesta = datetime.utcnow()
+        flujo.comentarios     = f"Aprobado por el comité ({aprobar_n} votos a favor)"
+        db.add(FlujoAprobacion(
+            id_solicitud=solicitud_id, orden=5,
+            nivel=NivelAprobacion.COORDINADOR, rol_responsable="coordinador_final",
+            estado="pendiente", fecha_recepcion=datetime.utcnow()
+        ))
+        resultado = "aprobado"
+    elif rechazar_n >= QUORUM_COMITE:
+        flujo.estado          = "rechazado"
+        flujo.fecha_respuesta = datetime.utcnow()
+        flujo.comentarios     = f"Rechazado por el comité ({rechazar_n} votos en contra)"
+        s.estado              = EstadoSolicitud.RECHAZADA
+        s.respuesta           = f"El Comité Asesor rechazó la solicitud ({rechazar_n} votos en contra)."
+        s.fecha_rechazo       = datetime.utcnow()
+        resultado = "rechazado"
+
+    db.commit()
+    return {
+        "mensaje": "Voto registrado",
+        "resultado_comite": resultado,
+        "votos_aprobar": aprobar_n,
+        "votos_rechazar": rechazar_n,
+        "quorum": QUORUM_COMITE,
+    }
+
+@router.get("/{solicitud_id}/votos-comite")
+def votos_comite(
+    solicitud_id: int,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    """Estado actual de la votación del comité para una solicitud: cuántos
+    votos de cada tipo hay, y si la persona actual ya votó."""
+    persona = _get_persona_autenticada(token, db)
+    conteo = db.execute(text(
+        "SELECT decision, COUNT(*) as n FROM voto_comite WHERE id_solicitud = :sol GROUP BY decision"
+    ), {"sol": solicitud_id}).fetchall()
+    votos = {row.decision: row.n for row in conteo}
+    ya_voto = db.execute(
+        text("SELECT decision FROM voto_comite WHERE id_solicitud = :sol AND id_persona = :per"),
+        {"sol": solicitud_id, "per": persona.id}
+    ).fetchone()
+    return {
+        "votos_aprobar":  votos.get("aprobar", 0),
+        "votos_rechazar": votos.get("rechazar", 0),
+        "quorum":         QUORUM_COMITE,
+        "ya_voto":        bool(ya_voto),
+        "mi_voto":        ya_voto[0] if ya_voto else None,
+    }
+
+# ── POST aprobación final del coordinador (tras el aval colegiado del comité) ──
+
+@router.post("/{solicitud_id}/coordinador/aprobar-final")
+def coordinador_aprobar_final(
+    solicitud_id: int,
+    body: AccionBody,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    persona = _get_persona_autenticada(token, db)
+    s = db.query(Solicitud).filter(Solicitud.id == solicitud_id).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+    if s.estado != EstadoSolicitud.EN_COMITE:
+        raise HTTPException(status_code=400, detail="La solicitud no está lista para la aprobación final")
+
+    flujo = db.query(FlujoAprobacion).filter(
+        FlujoAprobacion.id_solicitud == solicitud_id,
+        FlujoAprobacion.rol_responsable == "coordinador_final",
+        FlujoAprobacion.estado == "pendiente"
+    ).first()
+    if not flujo:
+        raise HTTPException(status_code=404, detail="El comité aún no ha completado la votación")
 
     if body.accion == "aprobar":
-        flujo.estado            = "aprobado"
-        flujo.fecha_respuesta   = datetime.utcnow()
-        flujo.comentarios       = body.motivo
-        s.estado                = EstadoSolicitud.APROBADA
-        s.id_quien_responde     = persona.id
-        s.fecha_aprobacion      = datetime.utcnow()
-        _agregar_observacion(s, "comité", body.observaciones)
+        if s.documentos_adjuntos and not body.documento_firmado:
+            firma = db.execute(
+                text("SELECT firmado_coordinador FROM documento_firma WHERE id_solicitud = :id"),
+                {"id": solicitud_id}
+            ).fetchone()
+            if not firma or not firma[0]:
+                raise HTTPException(status_code=400, detail="Debe firmar el documento antes de aprobar definitivamente")
+
+        flujo.estado           = "aprobado"
+        flujo.fecha_respuesta  = datetime.utcnow()
+        flujo.comentarios      = body.motivo
+        s.estado               = EstadoSolicitud.APROBADA
+        s.id_quien_responde    = persona.id
+        s.fecha_aprobacion     = datetime.utcnow()
+        _agregar_observacion(s, "coordinador", body.observaciones)
 
     elif body.accion == "rechazar":
         if not body.motivo:
@@ -628,7 +923,7 @@ def comite_accion(
         raise HTTPException(status_code=400, detail="Acción inválida")
 
     db.commit()
-    return {"mensaje": f"Solicitud {body.accion}da por el comité", "estado": s.estado.value}
+    return {"mensaje": f"Solicitud {body.accion}da definitivamente por el coordinador", "estado": s.estado.value}
 
 # ── GET detalle solicitud ─────────────────────────────────────────────────────
 
@@ -698,6 +993,8 @@ async def registrar_tema(
     linea_estrategica: Optional[str] = Form(None),
     grupo_investigacion: Optional[str] = Form(None),
     area_formacion: Optional[str] = Form(None),
+    director_cargo: Optional[str] = Form(None),
+    director_entidad: Optional[str] = Form(None),
     codirector: Optional[str] = Form(None),
     codirector_correo: Optional[str] = Form(None),
     codirector_cargo: Optional[str] = Form(None),
@@ -730,10 +1027,11 @@ async def registrar_tema(
         persona, estudiante, director, director_correo, titulo, objetivo_general,
         descripcion_alcances, linea_estrategica, grupo_investigacion, area_formacion,
         codirector, codirector_correo, codirector_cargo, codirector_entidad,
+        director_cargo, director_entidad,
     )
     solicitud = Solicitud(
         numero_radicado=_generar_radicado(db),
-        tipo_solicitud=TipoSolicitud.CAMBIO_TITULO,
+        tipo_solicitud=TipoSolicitud.REGISTRAR_TEMA,
         categoria=CategoriasSolicitud.INVESTIGACION,
         id_solicitante=persona.id,
         id_estudiante=estudiante.id,
@@ -762,6 +1060,8 @@ async def editar_registrar_tema(
     linea_estrategica: Optional[str] = Form(None),
     grupo_investigacion: Optional[str] = Form(None),
     area_formacion: Optional[str] = Form(None),
+    director_cargo: Optional[str] = Form(None),
+    director_entidad: Optional[str] = Form(None),
     codirector: Optional[str] = Form(None),
     codirector_correo: Optional[str] = Form(None),
     codirector_cargo: Optional[str] = Form(None),
@@ -775,6 +1075,7 @@ async def editar_registrar_tema(
         persona, estudiante, director, director_correo, titulo, objetivo_general,
         descripcion_alcances, linea_estrategica, grupo_investigacion, area_formacion,
         codirector, codirector_correo, codirector_cargo, codirector_entidad,
+        director_cargo, director_entidad,
     )
     s.asunto = asunto
     s.descripcion = descripcion

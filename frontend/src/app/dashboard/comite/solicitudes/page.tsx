@@ -17,9 +17,13 @@ interface Solicitud {
   fecha_envio: string;
   solicitante: string;
   tipo_solicitud: string;
+  votos_aprobar: number;
+  votos_rechazar: number;
+  quorum: number;
 }
 
 const tipoLabel: Record<string, string> = {
+  registrar_tema: "Registrar Tema",
   credito_condonable: "Crédito Condonable",
   prorroga: "Prórroga",
   cambio_director: "Cambio de Director",
@@ -124,12 +128,20 @@ export default function SolicitudesComite() {
         headers: { ...authHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error((await res.json()).detail || `Error al ${accion}`);
-      setExito(accion === "aprobar" ? "✅ Solicitud aprobada definitivamente" : "Solicitud rechazada. El estudiante será notificado.");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Error al votar`);
+
+      if (data.resultado_comite === "aprobado") {
+        setExito(`✅ ¡Se alcanzó el quórum! (${data.votos_aprobar}/${data.quorum} votos a favor) — pasa al coordinador para la firma final.`);
+      } else if (data.resultado_comite === "rechazado") {
+        setExito(`Solicitud rechazada por el comité (${data.votos_rechazar}/${data.quorum} votos en contra).`);
+      } else {
+        setExito(`Tu voto quedó registrado (${data.votos_aprobar} a favor, ${data.votos_rechazar} en contra — se necesitan ${data.quorum} para decidir).`);
+      }
       setSolicitudes(prev => prev.filter(s => s.id !== seleccionada.id));
       setSeleccionada(null); setDetalle(null);
     } catch (e: any) {
-      setError(e.message || `Error al ${accion}`);
+      setError(e.message || `Error al votar`);
     } finally { setProcesando(false); }
   };
 
@@ -173,18 +185,21 @@ export default function SolicitudesComite() {
                     seleccionada?.id === sol.id ? "border-green-500 ring-2 ring-green-200" : "border-gray-200 hover:border-green-300"
                   }`}>
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl">📋</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-gray-800 truncate">{tipoLabel[sol.tipo_solicitud] ?? sol.tipo_solicitud}</p>
-                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ En comité</span>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{sol.asunto}</p>
-                      <p className="text-xs text-gray-500 mt-1">👤 {sol.solicitante}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">📅 {(sol.fecha_envio ?? "")?.slice(0, 10)}</p>
-                      <p className="text-xs font-mono text-gray-400">{sol.numero_radicado}</p>
-                    </div>
+                  <span className="text-2xl">📋</span>
+                  <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-gray-800 truncate">{tipoLabel[sol.tipo_solicitud] ?? sol.tipo_solicitud}</p>
+                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full whitespace-nowrap">⏳ En comité</span>
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">{sol.asunto}</p>
+                  <p className="text-xs text-gray-500 mt-1">👤 {sol.solicitante}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">📅 {(sol.fecha_envio ?? "")?.slice(0, 10)}</p>
+                  <p className="text-xs font-mono text-gray-400">{sol.numero_radicado}</p>
+                    <p className="text-xs font-semibold text-blue-600 mt-1">
+                        🗳️ {sol.votos_aprobar} a favor · {sol.votos_rechazar} en contra (se necesitan {sol.quorum} para decidir)
+                        </p>
+                      </div>
+                    </div>
                 </button>
               ))
             )}
@@ -229,17 +244,17 @@ export default function SolicitudesComite() {
                 )}
 
                 <div className="border-t border-gray-200 pt-4 space-y-2">
-                  <p className="text-xs text-gray-500 font-medium text-center">Decisión final del comité</p>
+                  <p className="text-xs text-gray-500 font-medium text-center">Tu voto (se necesitan {seleccionada.quorum} de 7 para decidir)</p>
                   <div className="flex gap-2">
                     <button onClick={() => setModal("rechazar")} disabled={procesando}
                       className="flex-1 flex items-center justify-center gap-2 border border-red-300 text-red-600 py-2.5 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
-                      ❌ Rechazar
+                      ❌ Votar Rechazar
                     </button>
                     <button onClick={() => setModal("aprobar")} disabled={procesando}
                       className="flex-1 flex items-center justify-center gap-2 bg-green-700 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-green-800 disabled:opacity-60">
                       {procesando
                         ? <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Procesando...</>
-                        : <>✅ Aprobar definitivamente</>}
+                        : <>✅ Votar Aprobar</>}
                     </button>
                   </div>
                 </div>

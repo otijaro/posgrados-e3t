@@ -143,6 +143,7 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar, rolFirmant
   const [firmado, setFirmado]       = useState(false);
   const [posicionFirma, setPosicionFirma] = useState<{ pagina: number; yRelativo: number } | null>(null);
   const [buscandoUbicacion, setBuscandoUbicacion] = useState(false);
+  const [debugBusqueda, setDebugBusqueda] = useState<string[]>([]);
 
   useEffect(() => {
     const s1 = document.createElement("script");
@@ -189,25 +190,50 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar, rolFirmant
   }, [pdfBase64, rolFirmante]);
 
   async function buscarPosicionFirma(doc: any, rol: string): Promise<{ pagina: number; yRelativo: number } | null> {
-    const terminos = PALABRAS_CLAVE_FIRMA[rol] || [];
-    if (!terminos.length) return null;
+    const palabraRol: Record<string, string> = {
+      estudiante: "estudiante",
+      director: "director",
+      coordinador: "coordinador",
+    };
+    const clave = palabraRol[rol];
+    const log: string[] = [`rol='${rol}' clave='${clave}'`];
+    if (!clave) { setDebugBusqueda(log); return null; }
     try {
       for (let p = 1; p <= doc.numPages; p++) {
         const page = await doc.getPage(p);
         const textContent = await page.getTextContent();
         const vp = page.getViewport({ scale: 1 });
-        for (const item of textContent.items as any[]) {
-          const texto = (item.str || "").toLowerCase();
-          if (terminos.some(t => texto.includes(t))) {
-            const yPdf = item.transform[5]; // origen abajo-izquierda
-            const yDesdeArriba = vp.height - yPdf;
+        const items = textContent.items as any[];
+        log.push(`pág ${p}: ${items.length} fragmentos de texto`);
+
+        const conFirma = items.filter(it => (it.str || "").toLowerCase().includes("firma"));
+        log.push(`pág ${p}: ${conFirma.length} fragmentos contienen 'firma' → [${conFirma.map(i => JSON.stringify(i.str)).join(", ")}]`);
+
+        const conClave = items.filter(it => (it.str || "").toLowerCase().includes(clave));
+        log.push(`pág ${p}: ${conClave.length} fragmentos contienen '${clave}' → [${conClave.map(i => JSON.stringify(i.str)).join(", ")}]`);
+
+        for (const itFirma of conFirma) {
+          const yFirma = itFirma.transform[5];
+          const propiaCoincide = (itFirma.str || "").toLowerCase().includes(clave);
+          const vecino = items.find(it => {
+            if (it === itFirma) return false;
+            const mismaLinea = Math.abs(it.transform[5] - yFirma) < 8;
+            return mismaLinea && (it.str || "").toLowerCase().includes(clave);
+          });
+          if (propiaCoincide || vecino) {
+            log.push(`✅ MATCH en pág ${p}, y=${yFirma.toFixed(1)} (propia=${propiaCoincide}, vecino=${vecino ? JSON.stringify(vecino.str) : "no"})`);
+            setDebugBusqueda(log);
+            const yDesdeArriba = vp.height - yFirma;
             return { pagina: p, yRelativo: yDesdeArriba / vp.height };
           }
         }
       }
+      log.push("❌ Sin match en ninguna página");
     } catch (e) {
+      log.push(`❌ ERROR: ${e}`);
       console.error("No se pudo buscar la posición de firma:", e);
     }
+    setDebugBusqueda(log);
     return null;
   }
 
@@ -288,12 +314,25 @@ export default function FirmadorPDF({ pdfBase64, onFirmado, onCerrar, rolFirmant
       setFirmaB64(clean.split(",")[1]);
       setFirmaDataUrl(clean);
 
-      // Recuadro inicial: tamaño proporcional a la firma, centrado
+      // Recuadro inicial: tamaño proporcional a la firma. Si ya sabemos
+      // dónde debe firmar este rol (posicionFirma), lo ubicamos ahí mismo en
+      // vez de una posición fija — si no, cae por defecto cerca de la esquina.
       const cvs = canvasRef.current;
       const anchoDisponible = cvs ? cvs.getBoundingClientRect().width : 400;
       const w = Math.min(200, anchoDisponible * 0.35);
       const h = w * (img.height / img.width);
-      setCaja({ x: 40, y: 40, w, h });
+
+      if (posicionFirma && cvs) {
+        const rect = cvs.getBoundingClientRect();
+        const yPx = rect.height * posicionFirma.yRelativo;
+        // yPx es la línea base del texto "FIRMA ESTUDIANTE(S):" — el espacio
+        // vacío para la firma va JUSTO DEBAJO de esa etiqueta (dentro de la
+        // misma celda, antes de la fila "Nombre:"), no encima del texto.
+        setCaja({ x: 40, y: yPx + 26, w, h });
+      } else {
+        setCaja({ x: 40, y: 40, w, h });
+      }
+
       setFirmado(false);
       setMostrarDibujo(false);
     };

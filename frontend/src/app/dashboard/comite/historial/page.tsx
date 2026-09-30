@@ -11,6 +11,7 @@ function authHeaders(): Record<string, string> {
 }
 
 const tipoLabel: Record<string, string> = {
+  registrar_tema: "Registrar Tema",
   credito_condonable: "Crédito Condonable",
   prorroga: "Prórroga",
   cambio_director: "Cambio de Director",

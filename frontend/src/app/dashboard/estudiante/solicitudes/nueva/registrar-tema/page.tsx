@@ -84,6 +84,8 @@ function RegistrarTemaForm() {
 
   const [dirNombre, setDirNombre]               = useState("");
   const [dirCorreo, setDirCorreo]               = useState("");
+  const [dirCargo, setDirCargo]                 = useState("");
+  const [dirEntidad, setDirEntidad]             = useState("");
   const [codNombre, setCodNombre]               = useState("");
   const [codCorreo, setCodCorreo]               = useState("");
   const [codCargo, setCodCargo]                 = useState("");
@@ -131,6 +133,8 @@ function RegistrarTemaForm() {
           const d = solicitud.datos_formulario;
           setDirNombre(d.director ?? "");
           setDirCorreo(d.director_correo ?? "");
+          setDirCargo(d.director_cargo ?? "");
+          setDirEntidad(d.director_entidad ?? "");
           setCodNombre(d.codirector ?? "");
           setCodCorreo(d.codirector_correo ?? "");
           setCodCargo(d.codirector_cargo ?? "");
@@ -156,6 +160,25 @@ function RegistrarTemaForm() {
     return () => { if (prevVisorUrl.current) URL.revokeObjectURL(prevVisorUrl.current); };
   }, []);
 
+  // Si el documento ya está firmado y el estudiante edita cualquier campo del
+  // formulario, la firma deja de corresponder al contenido actual — la
+  // invalidamos para obligar a generar y firmar de nuevo antes de enviar.
+  useEffect(() => {
+    if (pdfFirmado) {
+      setPdfFirmado(null);
+      setPdfGenerado(null);
+      if (visorUrl) {
+        setVisorUrl(null);
+        if (prevVisorUrl.current) { URL.revokeObjectURL(prevVisorUrl.current); prevVisorUrl.current = null; }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    dirNombre, dirCorreo, dirCargo, dirEntidad,
+    codNombre, codCorreo, codCargo, codEntidad,
+    titulo, lineaEstrategica, grupoInv, areaFormacion, objetivo, alcances,
+  ]);
+
   const onDirNombre = useCallback((v: string) => { setDirNombre(v); setErrors(p => ({ ...p, director_nombre: "" })); }, []);
   const onDirCorreo = useCallback((v: string) => { setDirCorreo(v); setErrors(p => ({ ...p, director_correo: "" })); }, []);
   const onCodNombre = useCallback((v: string) => setCodNombre(v), []);
@@ -164,6 +187,7 @@ function RegistrarTemaForm() {
   const getDatosFormulario = () => ({
     titulo, programa: perfil?.programa ?? "", autor: user?.nombre_completo ?? "",
     codigo: perfil?.codigo_estudiante ?? "", director: dirNombre,
+    director_cargo: dirCargo, director_entidad: dirEntidad,
     codirector: codNombre, codirector_cargo: codCargo, codirector_entidad: codEntidad,
     linea_estrategica: lineaEstrategica, grupo_investigacion: grupoInv,
     area_formacion: areaFormacion, objetivo_general: objetivo, descripcion_alcances: alcances,
@@ -197,7 +221,14 @@ function RegistrarTemaForm() {
       return;
     }
     setGenerandoVer(true); setErrorServidor(null);
-    try { mostrarEnVisor(await fetchPDF()); }
+    try {
+      const b64 = await fetchPDF();
+      // Como acabamos de regenerar el documento con los datos actuales del
+      // formulario, cualquier firma anterior ya no corresponde a este PDF —
+      // hay que invalidarla y obligar a firmar de nuevo antes de enviar.
+      if (pdfFirmado) setPdfFirmado(null);
+      mostrarEnVisor(b64);
+    }
     catch (err: unknown) { setErrorServidor(err instanceof Error ? err.message : "Error al generar el PDF"); }
     finally { setGenerandoVer(false); }
   };
@@ -223,8 +254,23 @@ function RegistrarTemaForm() {
   const esCorreoUIS = (c: string) => /@([a-z0-9-]+\.)*uis\.edu\.co$/i.test(c.trim());
   const directorEsExterno = dirCorreo.trim() !== "" && esCorreoValido(dirCorreo) && !esCorreoUIS(dirCorreo);
 
+  // Cada vez que cambia si el director es externo o no (por ejemplo, el
+  // estudiante corrige el correo del director), los mensajes de error del
+  // codirector quedan obsoletos — los limpiamos para que se vuelvan a
+  // calcular desde cero según la regla vigente, en vez de quedar pegados.
+  useEffect(() => {
+    setErrors(p => ({
+      ...p,
+      codirector_nombre: "",
+      codirector_correo: "",
+      codirector_cargo: "",
+      codirector_entidad: "",
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [directorEsExterno]);
+
   const ORDEN_CAMPOS = [
-    "director_nombre", "director_correo",
+    "director_nombre", "director_correo", "director_cargo", "director_entidad",
     "codirector_nombre", "codirector_correo", "codirector_cargo", "codirector_entidad",
     "titulo", "linea_estrategica", "grupo_inv", "area_formacion",
     "objetivo_general", "alcances", "documento",
@@ -235,6 +281,11 @@ function RegistrarTemaForm() {
     if (!dirNombre.trim())                e.director_nombre   = "Obligatorio.";
     if (!dirCorreo.trim())                e.director_correo   = "Obligatorio.";
     else if (!esCorreoValido(dirCorreo))  e.director_correo   = "Correo inválido.";
+
+    if (directorEsExterno) {
+      if (!dirCargo.trim())               e.director_cargo    = "Obligatorio: el director es externo a la UIS.";
+      if (!dirEntidad.trim())             e.director_entidad  = "Obligatorio: el director es externo a la UIS.";
+    }
 
     const tieneCod = codNombre.trim() || codCorreo.trim() || codCargo.trim() || codEntidad.trim();
 
@@ -297,6 +348,8 @@ function RegistrarTemaForm() {
       const formData = new FormData();
       formData.append("director",             dirNombre);
       formData.append("director_correo",      dirCorreo);
+      if (dirCargo.trim())   formData.append("director_cargo",   dirCargo);
+      if (dirEntidad.trim()) formData.append("director_entidad", dirEntidad);
       formData.append("titulo",               titulo);
       formData.append("objetivo_general",     objetivo);
       formData.append("descripcion_alcances", alcances);
@@ -453,6 +506,37 @@ function RegistrarTemaForm() {
             <CampoPersona label="Director" nombre={dirNombre} correo={dirCorreo}
               onNombre={onDirNombre} onCorreo={onDirCorreo}
               errorNombre={errors.director_nombre} errorCorreo={errors.director_correo} />
+            {directorEsExterno && (
+              <div className="border border-gray-100 rounded-xl p-4 bg-white space-y-3 -mt-1">
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  ⚠️ El director tiene correo externo a la UIS — indica su cargo y universidad/entidad de origen.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Categoría / Cargo <span className="text-red-500">*</span>
+                    </label>
+                    <input type="text" value={dirCargo}
+                      onChange={e => { setDirCargo(e.target.value); setErrors(p => ({ ...p, director_cargo: "" })); }}
+                      data-field="director_cargo"
+                      placeholder="Ej. Profesor titular, Investigador"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.director_cargo ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.director_cargo && <p className="text-red-500 text-xs mt-0.5">{errors.director_cargo}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Universidad / Entidad <span className="text-red-500">*</span>
+                    </label>
+                    <input type="text" value={dirEntidad}
+                      onChange={e => { setDirEntidad(e.target.value); setErrors(p => ({ ...p, director_entidad: "" })); }}
+                      data-field="director_entidad"
+                      placeholder="Ej. Universidad Nacional, Externado"
+                      className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-green-500 bg-white ${errors.director_entidad ? "border-red-400" : "border-gray-200"}`} />
+                    {errors.director_entidad && <p className="text-red-500 text-xs mt-0.5">{errors.director_entidad}</p>}
+                  </div>
+                </div>
+              </div>
+            )}
             <div className="border border-gray-100 rounded-xl p-4 bg-gray-50 space-y-3">
               <p className="text-sm font-semibold text-gray-600">
                 Codirector

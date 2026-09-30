@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getMe, logout, UserInfo, rolPrincipal } from "@/lib/auth";
+import { getMe, logout, UserInfo, rolPrincipal, tieneRolComite } from "@/lib/auth";
 import { getMisEstudiantes, getMiPerfil } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
@@ -76,6 +76,8 @@ export default function Sidebar() {
   const [firmasPendientes, setFirmasPendientes]       = useState(0);
   const [avalGrupoPendientes, setAvalGrupoPendientes] = useState(0);
   const [esDoctorado, setEsDoctorado]     = useState(false);
+  const [esTambienComite, setEsTambienComite] = useState(false);
+  const [pendientesComite, setPendientesComite] = useState(0);
   const [abierto, setAbierto]             = useState(false);
 
   useEffect(() => {
@@ -112,6 +114,14 @@ export default function Sidebar() {
           .then(r => r.json()).then(d => setFirmasPendientes(Array.isArray(d) ? d.length : 0)).catch(() => {});
       }
 
+      // El coordinador siempre es también parte del comité — si tiene ese
+      // rol adicional, le agregamos el acceso al módulo de comité en su menu.
+      if (tieneRolComite(u)) {
+        setEsTambienComite(true);
+        fetch(`${API_URL}/api/solicitudes/pendientes/comite`, { headers: h })
+          .then(res => res.json()).then(d => setPendientesComite(Array.isArray(d) ? d.length : 0)).catch(() => {});
+      }
+
       if (r === "comite") {
         fetch(`${API_URL}/api/solicitudes/pendientes/comite`, { headers: h })
           .then(res => res.json()).then(d => setPendientes(Array.isArray(d) ? d.length : 0)).catch(() => {});
@@ -124,16 +134,33 @@ export default function Sidebar() {
     else if (pathname.includes("/coordinador")) setRol("coordinador");
     else if (pathname.includes("/director"))    setRol("director");
     else if (pathname.includes("/estudiante"))  setRol("estudiante");
-    else if (pathname.includes("/comite"))      setRol("comite");
+    else if (pathname.includes("/comite")) {
+      // Si también es coordinador, el menú combinado ya incluye el acceso al
+      // comité — mantenemos "coordinador" para no perder el resto de opciones.
+      setRol(esTambienComite && localStorage.getItem("rol_activo") === "coordinador" ? "coordinador" : "comite");
+    }
     else { const r = localStorage.getItem("rol_activo"); if (r) setRol(r); }
-  }, [pathname]);
+  }, [pathname, esTambienComite]);
 
   // Cierra el menú automáticamente al navegar a una nueva página
   useEffect(() => { setAbierto(false); }, [pathname]);
 
   function handleLogout() { logout(); router.push("/"); }
 
-  const menuItems = menus[rol] ?? menus["estudiante"];
+  const menuItems = (() => {
+    const base = menus[rol] ?? menus["estudiante"];
+    // Si esta persona también es parte del comité (típicamente el
+    // coordinador), agregamos el acceso al módulo de comité dentro de su
+    // mismo menú, sin quitarle nada de lo que ya tenía.
+    if (rol === "coordinador" && esTambienComite) {
+      return [
+        ...base,
+        { label: "Votar en Comité", href: "/dashboard/comite/solicitudes", icon: "🏛️" },
+        { label: "Historial Comité", href: "/dashboard/comite/historial",  icon: "📚" },
+      ];
+    }
+    return base;
+  })();
 
   function etiqueta(item: { label: string; href: string }): string {
     if (rol === "estudiante" && item.href === "/dashboard/estudiante/proyecto") {
@@ -194,6 +221,7 @@ export default function Sidebar() {
                                 (rol === "comite" && item.label === "Solicitudes");
             const esFirmas    = item.label === "Por firmar";
             const esAvalGrupo = item.label === "Aval grupo inv.";
+            const esVotarComite = item.label === "Votar en Comité";
 
             return (
               <Link key={item.href} href={item.href}
@@ -215,6 +243,11 @@ export default function Sidebar() {
                 {esAvalGrupo && avalGrupoPendientes > 0 && (
                   <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
                     {avalGrupoPendientes}
+                  </span>
+                )}
+                {esVotarComite && pendientesComite > 0 && (
+                  <span className="bg-purple-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                    {pendientesComite}
                   </span>
                 )}
               </Link>

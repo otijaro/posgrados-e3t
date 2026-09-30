@@ -44,6 +44,7 @@ function estadoLabel(estado: string) {
 
 function tipoSolicitudLabel(tipo: string) {
   const map: Record<string, string> = {
+    registrar_tema: "Registrar Tema",
     credito_condonable: "Crédito Condonable",
     prorroga: "Prórroga",
     cambio_director: "Cambio de Director",
@@ -176,8 +177,13 @@ function TarjetaEstudiante({
             {est.solicitudes.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Sin solicitudes registradas</p>
             ) : (
-              est.solicitudes.map((s) => (
-                <Link key={s.id} href={`/dashboard/director/solicitudes/${s.id}`}
+              [...est.solicitudes]
+                .sort((a, b) => (b.fecha_creacion || "").localeCompare(a.fecha_creacion || ""))
+                .map((s) => (
+                <Link key={s.id}
+                  href={s.estado === "enviada"
+                    ? `/dashboard/director/solicitudes?id=${s.id}`
+                    : `/dashboard/director/solicitudes/${s.id}`}
                   className="flex items-center justify-between border border-gray-100 rounded-lg p-3 hover:border-green-300 hover:bg-green-50 transition-colors">
                   <div>
                     <p className="text-sm font-medium text-gray-800">{tipoSolicitudLabel(s.tipo_solicitud)}</p>

@@ -55,14 +55,23 @@ const ROLES_DIRECTOR = new Set([
 export function rolPrincipal(user: UserInfo): string {
   const roles = user.roles.map(r => r.toLowerCase());
 
-  // Orden de prioridad
-  if (roles.some(r => r === "comite"))                   return "comite";
+  // Orden de prioridad. El coordinador va antes que "comite": en la práctica
+  // el coordinador SIEMPRE es también parte del comité, pero su panel
+  // principal de trabajo es el de coordinador (el acceso al comité se agrega
+  // como menú extra dentro de ese panel, ver tieneRolComite()).
   if (roles.some(r => r === "coordinador"))              return "coordinador";
+  if (roles.some(r => r === "comite"))                   return "comite";
   if (roles.some(r => r === "secretaria"))               return "secretaria";
   if (roles.some(r => ROLES_DIRECTOR.has(r)))            return "director";
   if (roles.some(r => r === "estudiante"))               return "estudiante";
 
   return "estudiante";
+}
+
+/** ¿Esta persona también tiene el rol de Comité Asesor, además de su rol
+ *  principal? (típicamente el coordinador, que siempre es parte del comité). */
+export function tieneRolComite(user: UserInfo): boolean {
+  return user.roles.map(r => r.toLowerCase()).some(r => r === "comite");
 }
 
 export function rutaPorRol(user: UserInfo): string {

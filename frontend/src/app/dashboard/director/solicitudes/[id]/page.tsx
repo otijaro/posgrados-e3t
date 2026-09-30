@@ -32,6 +32,7 @@ const estadoPasoIcono: Record<string, string> = {
 };
 
 const tipoSolicitudLabel: Record<string, string> = {
+  registrar_tema: "Registrar Tema",
   credito_condonable: "Crédito Condonable",
   prorroga: "Prórroga",
   cambio_director: "Cambio de Director",
