@@ -1,5 +1,7 @@
 """
-Seed: crea/vincula a los 7 integrantes del Comité Asesor de Posgrados.
+Seed: vincula a los 7 integrantes reales del Comité Asesor de Posgrados
+(ya existen como profesores, creados por seed_profesores_2026.py — aquí
+solo se les agrega el rol "comite", sin tocar su contraseña ni datos).
 Corre automáticamente en cada arranque del backend (ver entrypoint.sh).
   python seed_comite.py
 """
@@ -8,20 +10,19 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from app.database import SessionLocal
 from app.models import Persona, CatalogoRol, VinculacionActiva
-from app.services.auth import hash_password
 from sqlalchemy import or_
 
-PASSWORD_DEFECTO = "comite123"
-
-# (nombre completo, correo institucional a usar si hay que crearlo)
+# (nombre para el log, correo real en seed_profesores_2026.py)
+# Omar Tíjaro: su correo original es ojtijaro@uis.edu.co, pero seed_coordinador.py
+# se lo cambia después a e3t.coord.posgrado@uis.edu.co — buscamos por AMBOS.
 INTEGRANTES = [
-    ("Rodolfo Villamizar",  "rvillamizar@uis.edu.co"),
-    ("Maria Mantilla",      "mmantilla@uis.edu.co"),
-    ("Hans Garcia",         "hgarcia@uis.edu.co"),
-    ("Omar Tijaro",         "e3t.coord.posgrado@uis.edu.co"),  # ya existe: es el coordinador de pruebas
-    ("Oscar Quiroga",       "oquiroga@uis.edu.co"),
-    ("Franklin Sepulveda",  "fsepulveda@uis.edu.co"),
-    ("Ivan Serna",          "iserna@uis.edu.co"),
+    ("Rodolfo Villamizar",  ["rovillam@uis.edu.co"]),
+    ("Maria Mantilla",      ["marialem@uis.edu.co"]),
+    ("Hans Garcia",         ["hayegaar@uis.edu.co"]),
+    ("Omar Tijaro",         ["ojtijaro@uis.edu.co", "e3t.coord.posgrado@uis.edu.co"]),
+    ("Oscar Quiroga",       ["oquiroga@uis.edu.co"]),
+    ("Franklin Sepulveda",  ["alexander.sepulveda@saber.uis.edu.co"]),
+    ("Ivan Serna",          ["idsersua@uis.edu.co"]),
 ]
 
 db = SessionLocal()
@@ -41,32 +42,18 @@ try:
     else:
         print(f"✅ Rol 'comite' ya existe (id={rol.id})")
 
-    creados, vinculados = 0, 0
+    vinculados, no_encontrados = 0, 0
 
-    for nombre, correo_defecto in INTEGRANTES:
-        primer_apellido = nombre.split(" ")[-1]
+    for nombre, correos in INTEGRANTES:
         persona = db.query(Persona).filter(
-            or_(
-                Persona.nombre_completo.ilike(f"%{nombre}%"),
-                Persona.nombre_completo.ilike(f"%{primer_apellido}%"),
-                Persona.email_institucional == correo_defecto,
-            )
+            or_(*[Persona.email_institucional == c for c in correos])
         ).first()
 
         if not persona:
-            persona = Persona(
-                email_institucional=correo_defecto,
-                nombre_completo=nombre,
-                hashed_password=hash_password(PASSWORD_DEFECTO),
-            )
-            db.add(persona)
-            db.flush()
-            creados += 1
-            print(f"  ✅ Creado: {nombre} ({correo_defecto})")
-        else:
-            # Si ya existe (ej. Omar Tijaro como coordinador), NO tocamos su
-            # correo ni contraseña actuales — solo le agregamos el rol.
-            print(f"  ⏭️  Ya existe: {persona.nombre_completo} ({persona.email_institucional})")
+            print(f"  ⚠️  No encontrado: {nombre} (correos probados: {', '.join(correos)}) "
+                  f"— ¿ya corrió seed_profesores_2026.py?")
+            no_encontrados += 1
+            continue
 
         ya_vinculado = db.query(VinculacionActiva).filter(
             VinculacionActiva.id_persona == persona.id,
@@ -75,6 +62,7 @@ try:
 
         if ya_vinculado:
             ya_vinculado.es_activo = 1
+            print(f"  ✅ Ya vinculado: {persona.nombre_completo} ({persona.email_institucional})")
         else:
             db.add(VinculacionActiva(
                 id_persona=persona.id,
@@ -84,10 +72,11 @@ try:
                 es_activo=1,
             ))
             vinculados += 1
+            print(f"  ✅ Vinculado ahora: {persona.nombre_completo} ({persona.email_institucional})")
 
     db.commit()
-    print(f"\n🎉 Comité Asesor listo: {creados} persona(s) nueva(s), {vinculados} vinculación(es) nueva(s)")
-    print(f"   Contraseña por defecto para los nuevos: {PASSWORD_DEFECTO}")
+    print(f"\n🎉 Comité Asesor listo: {vinculados} vinculación(es) nueva(s), {no_encontrados} no encontrado(s)")
+    print(f"   (usan su contraseña normal de docente: uis2026)")
 
 except Exception as e:
     db.rollback()
